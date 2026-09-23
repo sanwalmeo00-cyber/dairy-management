@@ -1,0 +1,45 @@
+import type { WorkerPayment } from '@/types/farm';
+
+export const mockWorkerPayments: WorkerPayment[] = [
+  {
+    id: 'wp-1',
+    workerId: 'w-1',
+    date: '2026-09-01',
+    type: 'Salary',
+    amount: 35000,
+    paymentMethod: 'Bank Transfer',
+    ownerId: 'user-1',
+    ownerName: 'Partner A',
+  },
+  {
+    id: 'wp-2',
+    workerId: 'w-2',
+    date: '2026-09-01',
+    type: 'Salary',
+    amount: 25000,
+    paymentMethod: 'Cash',
+    ownerId: 'user-1',
+    ownerName: 'Partner A',
+  },
+  {
+    id: 'wp-3',
+    workerId: 'w-1',
+    date: '2026-08-15',
+    type: 'Bonus',
+    amount: 5000,
+    paymentMethod: 'Cash',
+    notes: 'Eid bonus.',
+    ownerId: 'user-2',
+    ownerName: 'Partner B',
+  },
+  {
+    id: 'wp-4',
+    workerId: 'w-2',
+    date: '2026-08-20',
+    type: 'Advance',
+    amount: 8000,
+    paymentMethod: 'JazzCash',
+    ownerId: 'user-2',
+    ownerName: 'Partner B',
+  },
+];
