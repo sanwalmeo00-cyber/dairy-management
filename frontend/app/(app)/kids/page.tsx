@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { kidsService } from '@/services/kids';
-import { mockGoats } from '@/data/mock/goats';
+import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
-import { useSoftDelete } from '@/context/SoftDeleteContext';
 import { useToast } from '@/context/ToastContext';
-import type { Kid } from '@/types/farm';
+import type { Goat, Kid } from '@/types/farm';
 import {
   PageHeader,
   SearchInput,
@@ -22,39 +21,50 @@ import {
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 
-function goatName(id: string) {
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
-
 export default function KidsPage() {
-  const { canModifyRecord, isOwnerOf, currentUser } = useAuth();
-  const { softDelete, filterActive } = useSoftDelete();
+  const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Kid[]>([]);
+  const [goats, setGoats] = useState<Goat[]>([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const goatTag = useCallback(
+    (id: string) => goats.find((g) => g.id === id)?.tagNumber ?? id,
+    [goats],
+  );
 
   useEffect(() => {
-    void kidsService.getAll().then(setRows);
-  }, []);
-
-  const activeRows = useMemo(() => filterActive(rows, 'kid'), [rows, filterActive]);
+    void (async () => {
+      setLoading(true);
+      try {
+        const [kids, herd] = await Promise.all([kidsService.getAll(), goatsService.getAll()]);
+        setRows(kids);
+        setGoats(herd);
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to load kids', 'error');
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return activeRows.filter((k) => {
+    return rows.filter((k) => {
       if (status && k.status !== status) return false;
       if (!q) return true;
       return (
-        k.name.toLowerCase().includes(q) ||
         k.tagNumber.toLowerCase().includes(q) ||
-        goatName(k.motherId).toLowerCase().includes(q)
+        goatTag(k.motherId).toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search, status]);
+  }, [rows, search, status, goatTag]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     const kid = rows.find((k) => k.id === deleteId);
     if (!kid || !canModifyRecord(kid.ownerId)) {
@@ -62,15 +72,13 @@ export default function KidsPage() {
       setDeleteId(null);
       return;
     }
-    softDelete({
-      entity: 'kid',
-      recordId: kid.id,
-      label: `${kid.name} (${kid.tagNumber})`,
-      ownerId: kid.ownerId,
-      ownerName: kid.ownerName,
-      deletedBy: currentUser,
-    });
-    toast('Marked as deleted — find it in Deleted tab');
+    try {
+      await kidsService.remove(kid.id);
+      setRows((prev) => prev.filter((k) => k.id !== kid.id));
+      toast('Kid deleted');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    }
     setDeleteId(null);
   };
 
@@ -78,10 +86,19 @@ export default function KidsPage() {
 
   return (
     <div>
-      <PageHeader title="Kids" description="Young goats from your breeding program." action={{ label: 'Register Kid', href: '/kids/new' }} />
+      <PageHeader
+        title="Kids"
+        description="Young goats from your breeding program."
+        action={{ label: 'Register Kid', href: '/kids/new' }}
+      />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search name, tag, mother…" className="sm:max-w-xs" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search tag, mother…"
+          className="sm:max-w-xs"
+        />
         <Select
           options={['Active', 'Sold', 'Deceased'].map((s) => ({ label: s, value: s }))}
           placeholder="All statuses"
@@ -94,13 +111,28 @@ export default function KidsPage() {
       <Table
         data={filtered}
         rowKey={(k) => k.id}
-        empty={<EmptyState title="No kids found" description="Register a kid or adjust filters." />}
+        empty={
+          <EmptyState
+            title={loading ? 'Loading…' : 'No kids found'}
+            description={loading ? 'Fetching from the server.' : 'Register a kid or adjust filters.'}
+          />
+        }
         columns={[
+          {
+            key: 'photo',
+            header: '',
+            render: (k) =>
+              k.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={k.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
+              ) : (
+                <span className="inline-block h-9 w-9 rounded-md bg-muted" />
+              ),
+          },
           { key: 'tag', header: 'Tag', render: (k) => k.tagNumber },
-          { key: 'name', header: 'Name', render: (k) => k.name },
           { key: 'gender', header: 'Gender', render: (k) => k.gender },
           { key: 'dob', header: 'DOB', render: (k) => formatDate(k.dateOfBirth) },
-          { key: 'mother', header: 'Mother', render: (k) => goatName(k.motherId) },
+          { key: 'mother', header: 'Mother', render: (k) => goatTag(k.motherId) },
           {
             key: 'status',
             header: 'Status',
@@ -136,14 +168,14 @@ export default function KidsPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         title="Delete kid?"
         description={
           pending
-            ? `“${pending.name}” will be marked as deleted (not removed from the database). You can find it later in the Deleted tab.`
+            ? `Tag “${pending.tagNumber}” will be marked as deleted.`
             : 'This record will be marked as deleted.'
         }
-        confirmLabel="Mark deleted"
+        confirmLabel="Delete"
       />
     </div>
   );

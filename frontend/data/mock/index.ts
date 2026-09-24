@@ -1,7 +1,4 @@
 export * from './users';
-export * from './goats';
-export * from './breeding';
-export * from './kids';
 export * from './goatPurchases';
 export * from './purchases';
 export * from './sales';

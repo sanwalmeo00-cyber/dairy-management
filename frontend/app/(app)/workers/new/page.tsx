@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { workersService } from '@/services/workers';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, Card, Input, Select, Textarea, Button } from '@/components/ui';
 import type { WorkerStatus } from '@/types/farm';
@@ -10,17 +11,31 @@ export default function NewWorkerPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast('Worker saved (mock)');
-    router.push('/workers');
+    const fd = new FormData(e.currentTarget);
+    try {
+      await workersService.create({
+        name: String(fd.get('name') ?? '').trim(),
+        phone: String(fd.get('phone') ?? '').trim(),
+        role: String(fd.get('role') ?? '').trim(),
+        salary: Number(fd.get('salary')),
+        joiningDate: String(fd.get('joiningDate')),
+        status: String(fd.get('status')),
+        notes: String(fd.get('notes') ?? '') || null,
+      });
+      toast('Worker saved');
+      router.push('/workers');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to save worker', 'error');
+    }
   };
 
   return (
     <div>
       <PageHeader title="Add Worker" description="Register a new farm worker." />
       <Card>
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
           <Input name="name" label="Full Name" required />
           <Input name="phone" label="Phone" required />
           <Input name="role" label="Role" required />

@@ -32,22 +32,8 @@ interface SoftDeleteContextValue {
 const SoftDeleteContext = createContext<SoftDeleteContextValue | null>(null);
 const STORAGE_KEY = 'gfms-soft-deleted';
 
-const seedDeleted: DeletedRecord[] = [
-  {
-    id: 'del-seed-1',
-    entity: 'goat',
-    recordId: 'goat-seed-deleted',
-    label: 'Old Buck (G099) — archived demo',
-    ownerId: 'user-1',
-    ownerName: 'Partner A',
-    deletedAt: '2026-09-10T10:00:00.000Z',
-    deletedBy: 'user-1',
-    deletedByName: 'Partner A',
-  },
-];
-
 export function SoftDeleteProvider({ children }: { children: ReactNode }) {
-  const [deleted, setDeleted] = useState<DeletedRecord[]>(seedDeleted);
+  const [deleted, setDeleted] = useState<DeletedRecord[]>([]);
 
   useEffect(() => {
     try {

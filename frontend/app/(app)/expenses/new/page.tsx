@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { expensesService } from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, Card, Input, Select, Textarea, Button } from '@/components/ui';
@@ -12,17 +13,30 @@ export default function NewExpensePage() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast(`Expense saved for ${currentUser.name} (mock)`);
-    router.push('/expenses');
+    const fd = new FormData(e.currentTarget);
+    try {
+      await expensesService.create({
+        date: String(fd.get('date')),
+        category: String(fd.get('category')),
+        description: String(fd.get('description') ?? '').trim(),
+        amount: Number(fd.get('amount')),
+        paymentMethod: String(fd.get('paymentMethod')),
+        notes: String(fd.get('notes') ?? '') || null,
+      });
+      toast(`Expense saved for ${currentUser.name}`);
+      router.push('/expenses');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to save expense', 'error');
+    }
   };
 
   return (
     <div>
       <PageHeader title="Add Expense" description={`Owned by ${currentUser.name}.`} />
       <Card>
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
           <Input name="date" label="Date" type="date" required />
           <Select
             name="category"

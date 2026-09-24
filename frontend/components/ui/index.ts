@@ -12,3 +12,4 @@ export { SearchInput } from './SearchInput';
 export { Avatar } from './Avatar';
 export { ViewOnlyBanner, OwnerBadge } from './Ownership';
 export { FormError, FieldHint } from './FormError';
+export { ImageUpload } from './ImageUpload';

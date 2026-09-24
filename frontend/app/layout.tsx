@@ -3,7 +3,7 @@ import { Providers } from '@/components/Providers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Green Meadow — Goat Farm Management',
+  title: 'SMS Dairy Farm — Dairy Farm Management',
   description: 'Goat farm management system for partners, livestock, and finance',
 };
 

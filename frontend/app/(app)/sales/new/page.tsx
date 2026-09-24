@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { mockGoats } from '@/data/mock/goats';
+import { salesService } from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, Card, Input, Select, Textarea, Button } from '@/components/ui';
@@ -13,21 +13,33 @@ export default function NewSalePage() {
   const { currentUser } = useAuth();
   const { toast } = useToast();
 
-  const goatOptions = mockGoats.map((g) => ({ label: `${g.name} (${g.tagNumber})`, value: g.id }));
-
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast(`Sale saved for ${currentUser.name} (mock)`);
-    router.push('/sales');
+    const fd = new FormData(e.currentTarget);
+    try {
+      await salesService.create({
+        date: String(fd.get('date')),
+        tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+        buyer: String(fd.get('buyer') ?? '').trim(),
+        salePrice: Number(fd.get('salePrice')),
+        paymentStatus: String(fd.get('paymentStatus')),
+        paymentMethod: String(fd.get('paymentMethod')),
+        notes: String(fd.get('notes') ?? '') || null,
+      });
+      toast(`Sale saved for ${currentUser.name}`);
+      router.push('/sales');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to save sale', 'error');
+    }
   };
 
   return (
     <div>
       <PageHeader title="Record Sale" description={`Owned by ${currentUser.name}.`} />
       <Card>
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
           <Input name="date" label="Sale Date" type="date" required />
-          <Select name="goatId" label="Goat" required options={goatOptions} placeholder="Select goat" />
+          <Input name="tagNumber" label="Tag Number" required placeholder="e.g. G001" />
           <Input name="buyer" label="Buyer" required className="sm:col-span-2" />
           <Input name="salePrice" label="Sale Price (Rs.)" type="number" required />
           <Select

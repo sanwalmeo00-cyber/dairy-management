@@ -1,11 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { salesService } from '@/services/finance';
-import { mockGoats } from '@/data/mock/goats';
 import { useAuth } from '@/context/AuthContext';
-import { useSoftDelete } from '@/context/SoftDeleteContext';
 import { useToast } from '@/context/ToastContext';
 import type { Sale } from '@/types/farm';
 import {
@@ -21,37 +18,41 @@ import {
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 
-function goatName(id: string) {
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
-
 export default function SalesPage() {
-  const { canModifyRecord, isOwnerOf, currentUser } = useAuth();
-  const { softDelete, filterActive } = useSoftDelete();
+  const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Sale[]>([]);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void salesService.getAll().then(setRows);
-  }, []);
-
-  const activeRows = useMemo(() => filterActive(rows, 'sale'), [rows, filterActive]);
+    void (async () => {
+      setLoading(true);
+      try {
+        setRows(await salesService.getAll());
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to load sales', 'error');
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return activeRows.filter((r) => {
+    return rows.filter((r) => {
       if (!q) return true;
       return (
-        goatName(r.goatId).toLowerCase().includes(q) ||
+        r.tagNumber.toLowerCase().includes(q) ||
         r.buyer.toLowerCase().includes(q) ||
         r.paymentStatus.toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search]);
+  }, [rows, search]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     const sale = rows.find((r) => r.id === deleteId);
     if (!sale || !canModifyRecord(sale.ownerId)) {
@@ -59,15 +60,13 @@ export default function SalesPage() {
       setDeleteId(null);
       return;
     }
-    softDelete({
-      entity: 'sale',
-      recordId: sale.id,
-      label: `Sale: ${goatName(sale.goatId)} to ${sale.buyer}`,
-      ownerId: sale.ownerId,
-      ownerName: sale.ownerName,
-      deletedBy: currentUser,
-    });
-    toast('Marked as deleted — find it in Deleted tab');
+    try {
+      await salesService.remove(sale.id);
+      setRows((prev) => prev.filter((r) => r.id !== sale.id));
+      toast('Sale deleted');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    }
     setDeleteId(null);
   };
 
@@ -75,17 +74,31 @@ export default function SalesPage() {
 
   return (
     <div>
-      <PageHeader title="Sales" description="Goat sales and buyer records." action={{ label: 'Record Sale', href: '/sales/new' }} />
+      <PageHeader
+        title="Sales"
+        description="Goat sales and buyer records."
+        action={{ label: 'Record Sale', href: '/sales/new' }}
+      />
       <div className="mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search goat, buyer…" className="sm:max-w-xs" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search tag, buyer…"
+          className="sm:max-w-xs"
+        />
       </div>
       <Table
         data={filtered}
         rowKey={(r) => r.id}
-        empty={<EmptyState title="No sales" description="Record a sale when you sell a goat." />}
+        empty={
+          <EmptyState
+            title={loading ? 'Loading…' : 'No sales'}
+            description={loading ? 'Fetching from the server.' : 'Record a sale when you sell a goat.'}
+          />
+        }
         columns={[
           { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
-          { key: 'goat', header: 'Goat', render: (r) => goatName(r.goatId) },
+          { key: 'tag', header: 'Tag No', render: (r) => r.tagNumber },
           { key: 'buyer', header: 'Buyer', render: (r) => r.buyer },
           { key: 'price', header: 'Sale Price', render: (r) => formatCurrency(r.salePrice) },
           {
@@ -104,22 +117,10 @@ export default function SalesPage() {
             className: 'text-right',
             render: (r) => (
               <div className="flex justify-end gap-1">
-                <Link href={`/goats/${r.goatId}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
                 {canModifyRecord(r.ownerId) && (
-                  <>
-                    <Link href="/sales/new">
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </Link>
-                    <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
-                      Delete
-                    </Button>
-                  </>
+                  <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
+                    Delete
+                  </Button>
                 )}
               </div>
             ),
@@ -129,14 +130,14 @@ export default function SalesPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         title="Delete sale?"
         description={
           pending
-            ? `Sale of “${goatName(pending.goatId)}” will be marked as deleted (not removed from the database). You can find it later in the Deleted tab.`
+            ? `Sale of tag “${pending.tagNumber}” will be marked as deleted.`
             : 'This record will be marked as deleted.'
         }
-        confirmLabel="Mark deleted"
+        confirmLabel="Delete"
       />
     </div>
   );

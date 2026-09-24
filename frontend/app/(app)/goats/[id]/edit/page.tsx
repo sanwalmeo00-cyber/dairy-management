@@ -6,7 +6,16 @@ import Link from 'next/link';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { PageHeader, Card, Input, Select, Textarea, Button, ViewOnlyBanner } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  Input,
+  Select,
+  Textarea,
+  Button,
+  ViewOnlyBanner,
+  ImageUpload,
+} from '@/components/ui';
 import type { Goat, HealthStatus, VaccinationStatus, GoatStatus } from '@/types/farm';
 
 export default function EditGoatPage() {
@@ -15,9 +24,13 @@ export default function EditGoatPage() {
   const { canModifyRecord } = useAuth();
   const { toast } = useToast();
   const [goat, setGoat] = useState<Goat | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    void goatsService.getById(id).then((g) => setGoat(g ?? null));
+    void goatsService.getById(id).then((g) => {
+      setGoat(g ?? null);
+      setImageUrl(g?.imageUrl ?? null);
+    });
   }, [id]);
 
   if (!goat) {
@@ -26,22 +39,48 @@ export default function EditGoatPage() {
 
   const canEdit = canModifyRecord(goat.ownerId);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canEdit) return;
-    toast('Goat updated (mock)');
-    router.push('/goats');
+    const fd = new FormData(e.currentTarget);
+    try {
+      await goatsService.update(goat.id, {
+        tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+        breed: String(fd.get('breed') ?? '').trim(),
+        gender: String(fd.get('gender')) as 'Male' | 'Female',
+        dateOfBirth: String(fd.get('dateOfBirth')),
+        weight: Number(fd.get('weight')),
+        color: String(fd.get('color') ?? '').trim(),
+        currentValue: Number(fd.get('currentValue')),
+        healthStatus: String(fd.get('healthStatus')),
+        vaccinationStatus: String(fd.get('vaccinationStatus')),
+        status: String(fd.get('status')),
+        imageUrl,
+        notes: String(fd.get('notes') ?? '') || null,
+      });
+      toast('Goat updated');
+      router.push(`/goats/${goat.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Update failed', 'error');
+    }
   };
 
   return (
     <div>
-      <PageHeader title={`Edit ${goat.name}`} description={`Tag ${goat.tagNumber}`} />
+      <PageHeader title={`Edit ${goat.tagNumber}`} description={goat.breed} />
       {!canEdit && <ViewOnlyBanner ownerName={goat.ownerName} />}
 
       <Card>
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <ImageUpload
+              folder="goats"
+              value={imageUrl}
+              onChange={setImageUrl}
+              disabled={!canEdit}
+            />
+          </div>
           <Input name="tagNumber" label="Tag Number" defaultValue={goat.tagNumber} required disabled={!canEdit} />
-          <Input name="name" label="Name" defaultValue={goat.name} required disabled={!canEdit} />
           <Input name="breed" label="Breed" defaultValue={goat.breed} required disabled={!canEdit} />
           <Select
             name="gender"
@@ -115,7 +154,7 @@ export default function EditGoatPage() {
             <Textarea name="notes" label="Notes" rows={3} defaultValue={goat.notes ?? ''} disabled={!canEdit} />
           </div>
           <div className="flex gap-2 sm:col-span-2">
-            <Link href="/goats">
+            <Link href={`/goats/${goat.id}`}>
               <Button type="button" variant="outline">
                 Cancel
               </Button>

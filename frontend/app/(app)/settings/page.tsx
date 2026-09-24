@@ -1,36 +1,52 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { dashboardService } from '@/services/dashboard';
-import { PageHeader, Card, Input, Button, Select } from '@/components/ui';
-import type { FarmSettings } from '@/types/farm';
+import { settingsService } from '@/services/settings';
+import { PageHeader, Card, Input, Button } from '@/components/ui';
 
 export default function SettingsPage() {
-  const { currentUser, users, logout, switchPartner } = useAuth();
+  const { currentUser, refreshUser, logout } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [farm, setFarm] = useState<FarmSettings | null>(null);
 
-  useEffect(() => {
-    void dashboardService.getSettings().then(setFarm);
-  }, []);
-
-  const handleProfileSave = (e: React.FormEvent) => {
+  const handleProfileSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast('Profile updated (mock)');
+    const fd = new FormData(e.currentTarget);
+    try {
+      const updated = await settingsService.updateProfile({
+        name: String(fd.get('name') ?? '').trim(),
+        phone: String(fd.get('phone') ?? '').trim() || null,
+      });
+      refreshUser(updated);
+      toast('Profile updated');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to update profile', 'error');
+    }
   };
 
-  const handleFarmSave = (e: React.FormEvent) => {
+  const handlePasswordSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast('Farm settings saved (mock)');
-  };
-
-  const handlePasswordSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast('Password changed (mock)');
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const newPassword = String(fd.get('new') ?? '');
+    const confirmPassword = String(fd.get('confirm') ?? '');
+    if (newPassword !== confirmPassword) {
+      toast('New passwords do not match', 'error');
+      return;
+    }
+    try {
+      await settingsService.changePassword({
+        currentPassword: String(fd.get('current') ?? ''),
+        newPassword,
+        confirmPassword,
+      });
+      toast('Password updated');
+      form.reset();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to update password', 'error');
+    }
   };
 
   const handleLogout = () => {
@@ -40,62 +56,60 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" description="Profile, farm preferences, and account." />
+      <PageHeader title="Settings" description="Your account and password." />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <h2 className="mb-4 font-semibold">Profile</h2>
-          <form onSubmit={handleProfileSave} className="space-y-4">
-            <Input label="Name" defaultValue={currentUser.name} name="name" />
-            <Input label="Email" type="email" defaultValue={currentUser.email} name="email" />
+          <form key={currentUser.id + currentUser.name + (currentUser.phone ?? '')} onSubmit={(e) => void handleProfileSave(e)} className="space-y-4">
+            <Input label="Name" defaultValue={currentUser.name} name="name" required />
+            <Input label="Email" type="email" defaultValue={currentUser.email} name="email" disabled />
             <Input label="Phone" defaultValue={currentUser.phone ?? ''} name="phone" />
+            <Input
+              label="Role"
+              defaultValue={currentUser.role === 'SUPER_ADMIN' ? 'Super Admin' : 'User'}
+              disabled
+            />
             <Button type="submit">Save Profile</Button>
           </form>
         </Card>
 
         <Card>
-          <h2 className="mb-4 font-semibold">Farm Settings</h2>
-          {farm && (
-            <form onSubmit={handleFarmSave} className="space-y-4">
-              <Input label="Farm Name" defaultValue={farm.farmName} name="farmName" />
-              <Input label="Location" defaultValue={farm.farmLocation} name="farmLocation" />
-              <Input label="Currency" defaultValue={farm.currency} name="currency" disabled />
-              <Button type="submit">Save Farm Settings</Button>
-            </form>
-          )}
-        </Card>
-
-        <Card>
           <h2 className="mb-4 font-semibold">Change Password</h2>
-          <form onSubmit={handlePasswordSave} className="space-y-4">
-            <Input label="Current Password" type="password" name="current" required />
-            <Input label="New Password" type="password" name="new" required />
-            <Input label="Confirm Password" type="password" name="confirm" required />
+          <form onSubmit={(e) => void handlePasswordSave(e)} className="space-y-4">
+            <Input
+              label="Current Password"
+              type="password"
+              name="current"
+              required
+              autoComplete="current-password"
+            />
+            <Input
+              label="New Password"
+              type="password"
+              name="new"
+              required
+              autoComplete="new-password"
+              minLength={8}
+            />
+            <Input
+              label="Confirm Password"
+              type="password"
+              name="confirm"
+              required
+              autoComplete="new-password"
+              minLength={8}
+            />
             <Button type="submit">Update Password</Button>
           </form>
         </Card>
 
-        <Card>
-          <h2 className="mb-4 font-semibold">Partner & Session</h2>
-          <p className="mb-4 text-sm text-muted-fg">
-            This demo farm has two partners. Switch partner from the header user menu to see
-            view-only records owned by the other partner. Ownership on new records uses the active
-            partner automatically.
-          </p>
-          <Select
-            label="Switch partner (demo)"
-            value={currentUser.id}
-            onChange={(e) => {
-              switchPartner(e.target.value);
-              toast('Partner switched (mock)');
-            }}
-            options={users.map((u) => ({ label: u.name, value: u.id }))}
-          />
-          <div className="mt-4">
-            <Button variant="danger" onClick={handleLogout}>
-              Log out
-            </Button>
-          </div>
+        <Card className="lg:col-span-2">
+          <h2 className="mb-2 font-semibold">Session</h2>
+          <p className="mb-4 text-sm text-muted-fg">Sign out of SMS Dairy Farm on this device.</p>
+          <Button variant="danger" onClick={handleLogout}>
+            Log out
+          </Button>
         </Card>
       </div>
     </div>

@@ -24,33 +24,52 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { dashboardService } from '@/services/dashboard';
+import { dashboardService, type DashboardData } from '@/services/dashboard';
+import { useToast } from '@/context/ToastContext';
 import { PageHeader, StatCard, Card, Button } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
-import type { ActivityItem } from '@/types/farm';
 
 const PIE_COLORS = ['#2d5a3d', '#c4a35a', '#8fa392', '#b42318'];
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Awaited<ReturnType<typeof dashboardService.getStats>> | null>(
-    null
-  );
-  const [charts, setCharts] = useState<Awaited<ReturnType<typeof dashboardService.getCharts>> | null>(
-    null
-  );
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const { toast } = useToast();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async (refresh = false) => {
+    setLoading(true);
+    try {
+      setData(await dashboardService.getAll({ refresh }));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to load dashboard', 'error');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void (async () => {
-      setStats(await dashboardService.getStats());
-      setCharts(await dashboardService.getCharts());
-      setActivities(await dashboardService.getActivities());
-    })();
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!stats || !charts) {
+  if (loading && !data) {
     return <p className="text-sm text-muted-fg">Loading dashboard…</p>;
   }
+
+  if (!data) {
+    return (
+      <div>
+        <PageHeader title="Dashboard" description="Overview of your goat farm operations." />
+        <p className="text-sm text-muted-fg">Could not load dashboard data.</p>
+        <Button className="mt-3" onClick={() => void load(true)}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const { stats, charts, activities } = data;
 
   const quickActions = [
     { label: 'Add Goat', href: '/goats/new' },
@@ -62,7 +81,11 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Overview of your goat farm operations." />
+      <PageHeader title="Dashboard" description="Overview of your goat farm operations.">
+        <Button variant="outline" onClick={() => void load(true)}>
+          Refresh
+        </Button>
+      </PageHeader>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
@@ -71,11 +94,7 @@ export default function DashboardPage() {
           hint={`${stats.activeGoats} active`}
           icon={<Rabbit className="h-5 w-5" />}
         />
-        <StatCard
-          label="Kids"
-          value={String(stats.kids)}
-          icon={<Baby className="h-5 w-5" />}
-        />
+        <StatCard label="Kids" value={String(stats.kids)} icon={<Baby className="h-5 w-5" />} />
         <StatCard
           label="Total Sales"
           value={formatCurrency(stats.totalSales)}
@@ -127,49 +146,57 @@ export default function DashboardPage() {
         <Card>
           <h2 className="mb-4 font-semibold">Gender Distribution</h2>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={charts.gender}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  label
-                >
-                  {charts.gender.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {charts.gender.length === 0 ? (
+              <p className="text-sm text-muted-fg">No goats yet.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={charts.gender}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {charts.gender.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
         <Card>
           <h2 className="mb-4 font-semibold">Goat Status</h2>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={charts.status}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  label
-                >
-                  {charts.status.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {charts.status.length === 0 ? (
+              <p className="text-sm text-muted-fg">No goats yet.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={charts.status}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {charts.status.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Card>
       </div>
@@ -177,17 +204,21 @@ export default function DashboardPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <h2 className="mb-4 font-semibold">Recent Activity</h2>
-          <ul className="space-y-3">
-            {activities.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0"
-              >
-                <p className="text-sm">{a.message}</p>
-                <span className="shrink-0 text-xs text-muted-fg">{a.timeAgo}</span>
-              </li>
-            ))}
-          </ul>
+          {activities.length === 0 ? (
+            <p className="text-sm text-muted-fg">No recent activity yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {activities.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0"
+                >
+                  <p className="text-sm">{a.message}</p>
+                  <span className="shrink-0 text-xs text-muted-fg">{a.timeAgo}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
         <Card>
           <h2 className="mb-4 font-semibold">Quick Actions</h2>

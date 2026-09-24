@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { AnyZodObject, ZodError } from 'zod';
+import { ZodError, ZodTypeAny } from 'zod';
 import { ValidationError } from '../utils/errors';
 
 type RequestPart = 'body' | 'query' | 'params';
 
-export function validate(schema: AnyZodObject, part: RequestPart = 'body') {
+export function validate(schema: ZodTypeAny, part: RequestPart = 'body') {
   return (req: Request, _res: Response, next: NextFunction): void => {
     try {
       const parsed = schema.parse(req[part]);

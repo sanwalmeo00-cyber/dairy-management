@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useSoftDelete } from '@/context/SoftDeleteContext';
 import { useToast } from '@/context/ToastContext';
+import { deletedService, type RestorableEntity } from '@/services/deleted';
 import {
   PageHeader,
   SearchInput,
@@ -17,35 +17,60 @@ import {
   ConfirmDialog,
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import type { SoftDeleteEntity } from '@/types/farm';
+import type { DeletedRecord } from '@/types/farm';
 
-const entityLabels: Record<SoftDeleteEntity, string> = {
+const entityLabels: Record<RestorableEntity, string> = {
   goat: 'Goat',
   breeding: 'Breeding',
   kid: 'Kid',
   'goat-purchase': 'Goat Purchase',
-  purchase: 'Purchase',
   sale: 'Sale',
   expense: 'Expense',
   worker: 'Worker',
   inventory: 'Inventory',
 };
 
+const restoreRoutes: Partial<Record<RestorableEntity, string>> = {
+  goat: '/goats',
+  breeding: '/breeding',
+  kid: '/kids',
+  'goat-purchase': '/goat-purchases',
+  sale: '/sales',
+  expense: '/expenses',
+  worker: '/workers',
+  inventory: '/inventory',
+};
+
 export default function DeletedPage() {
   const { isSuperAdmin, isOwnerOf, currentUser } = useAuth();
-  const { deleted, restore } = useSoftDelete();
   const { toast } = useToast();
   const router = useRouter();
+  const [rows, setRows] = useState<DeletedRecord[]>([]);
   const [search, setSearch] = useState('');
   const [entity, setEntity] = useState('');
   const [restoreId, setRestoreId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setRows(await deletedService.getAll());
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to load deleted records', 'error');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visible = useMemo(() => {
-    const base = isSuperAdmin
-      ? deleted
-      : deleted.filter((d) => d.ownerId === currentUser.id || d.deletedBy === currentUser.id);
     const q = search.toLowerCase();
-    return base.filter((d) => {
+    return rows.filter((d) => {
       if (entity && d.entity !== entity) return false;
       if (!q) return true;
       return (
@@ -54,9 +79,23 @@ export default function DeletedPage() {
         d.deletedByName.toLowerCase().includes(q)
       );
     });
-  }, [deleted, isSuperAdmin, currentUser.id, search, entity]);
+  }, [rows, search, entity]);
 
-  const pending = deleted.find((d) => d.id === restoreId);
+  const pending = rows.find((d) => d.id === restoreId);
+
+  const confirmRestore = async () => {
+    if (!pending) return;
+    try {
+      await deletedService.restore(pending.entity as RestorableEntity, pending.recordId);
+      toast('Record restored');
+      setRestoreId(null);
+      await load();
+      const href = restoreRoutes[pending.entity as RestorableEntity];
+      if (href) router.push(href);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to restore', 'error');
+    }
+  };
 
   return (
     <div>
@@ -79,7 +118,7 @@ export default function DeletedPage() {
           className="sm:max-w-xs"
         />
         <Select
-          options={(Object.keys(entityLabels) as SoftDeleteEntity[]).map((k) => ({
+          options={(Object.keys(entityLabels) as RestorableEntity[]).map((k) => ({
             label: entityLabels[k],
             value: k,
           }))}
@@ -95,7 +134,7 @@ export default function DeletedPage() {
         rowKey={(d) => d.id}
         empty={
           <EmptyState
-            title="No deleted records"
+            title={loading ? 'Loading…' : 'No deleted records'}
             description="When you delete something, it appears here tagged as deleted."
           />
         }
@@ -108,7 +147,7 @@ export default function DeletedPage() {
           {
             key: 'type',
             header: 'Type',
-            render: (d) => entityLabels[d.entity],
+            render: (d) => entityLabels[d.entity as RestorableEntity] ?? d.entity,
           },
           { key: 'label', header: 'Record', render: (d) => d.label },
           {
@@ -146,13 +185,7 @@ export default function DeletedPage() {
       <ConfirmDialog
         open={!!restoreId}
         onClose={() => setRestoreId(null)}
-        onConfirm={() => {
-          if (!restoreId) return;
-          restore(restoreId);
-          toast('Record restored');
-          setRestoreId(null);
-          if (pending?.entity === 'goat') router.push('/goats');
-        }}
+        onConfirm={() => void confirmRestore()}
         title="Restore record?"
         description={
           pending

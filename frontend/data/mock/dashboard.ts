@@ -39,18 +39,18 @@ export const mockStatusDistribution = [
 ];
 
 export const mockActivities: ActivityItem[] = [
-  { id: 'a1', message: 'Sultan was added', timeAgo: '2 hours ago', type: 'goat' },
-  { id: 'a2', message: 'Rani was sold', timeAgo: '5 hours ago', type: 'sale' },
+  { id: 'a1', message: 'New goat tagged', timeAgo: '2 hours ago', type: 'goat' },
+  { id: 'a2', message: 'Sale recorded', timeAgo: '5 hours ago', type: 'sale' },
   { id: 'a3', message: 'New expense recorded', timeAgo: 'Yesterday', type: 'expense' },
   { id: 'a4', message: 'Worker payment added', timeAgo: 'Yesterday', type: 'payment' },
-  { id: 'a5', message: 'Breeding planned for Gulabo', timeAgo: '2 days ago', type: 'breeding' },
+  { id: 'a5', message: 'Breeding planned', timeAgo: '2 days ago', type: 'breeding' },
 ];
 
 export const mockNotifications: NotificationItem[] = [
   {
     id: 'n1',
     title: 'New goat added',
-    message: 'Sultan (G001) was registered.',
+    message: 'A new goat was registered.',
     timeAgo: '5 minutes ago',
     read: false,
   },
@@ -71,7 +71,7 @@ export const mockNotifications: NotificationItem[] = [
 ];
 
 export const mockFarmSettings: FarmSettings = {
-  farmName: 'Green Meadow Goat Farm',
+  farmName: 'SMS Dairy Farm',
   farmLocation: 'Kasur, Punjab, Pakistan',
   currency: 'PKR / Rs.',
 };

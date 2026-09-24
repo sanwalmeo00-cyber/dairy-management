@@ -1,64 +1,51 @@
-import { mockWorkers } from '@/data/mock/workers';
-import { mockWorkerPayments } from '@/data/mock/workerPayments';
-import { mockInventory, mockInventoryTransactions } from '@/data/mock/inventory';
-import {
-  mockDashboardStats,
-  mockSalesVsExpenses,
-  mockPopulationTrend,
-  mockGenderDistribution,
-  mockStatusDistribution,
-  mockActivities,
-  mockNotifications,
-  mockFarmSettings,
-  mockBreedDistribution,
-} from '@/data/mock/dashboard';
+import { api } from '@/lib/api';
+import type { ActivityItem } from '@/types/farm';
 
-export const workersService = {
-  async getAll() {
-    return [...mockWorkers];
-  },
-  async getById(id: string) {
-    return mockWorkers.find((w) => w.id === id);
-  },
-  async getPayments(workerId?: string) {
-    if (!workerId) return [...mockWorkerPayments];
-    return mockWorkerPayments.filter((p) => p.workerId === workerId);
-  },
+export type DashboardStats = {
+  totalGoats: number;
+  activeGoats: number;
+  kids: number;
+  totalSales: number;
+  totalExpenses: number;
+  farmValue: number;
+  lowStockItems: number;
 };
 
-export const inventoryService = {
-  async getAll() {
-    return [...mockInventory];
-  },
-  async getById(id: string) {
-    return mockInventory.find((i) => i.id === id);
-  },
-  async getTransactions(itemId?: string) {
-    if (!itemId) return [...mockInventoryTransactions];
-    return mockInventoryTransactions.filter((t) => t.itemId === itemId);
-  },
+export type DashboardCharts = {
+  salesVsExpenses: { month: string; sales: number; expenses: number }[];
+  population: { month: string; adults: number; kids: number }[];
+  gender: { name: string; value: number }[];
+  status: { name: string; value: number }[];
+  breeds: { name: string; value: number }[];
 };
+
+export type DashboardData = {
+  stats: DashboardStats;
+  charts: DashboardCharts;
+  activities: ActivityItem[];
+  cachedAt: string;
+  fromCache: boolean;
+};
+
+const CLIENT_TTL_MS = 60_000;
+let clientCache: { data: DashboardData; expiresAt: number } | null = null;
+
+export { workersService } from '@/services/workers';
+export { inventoryService } from '@/services/inventory';
 
 export const dashboardService = {
-  async getStats() {
-    return mockDashboardStats;
+  async getAll(options?: { refresh?: boolean }): Promise<DashboardData> {
+    if (!options?.refresh && clientCache && Date.now() < clientCache.expiresAt) {
+      return { ...clientCache.data, fromCache: true };
+    }
+
+    const q = options?.refresh ? '?refresh=1' : '';
+    const data = await api.get<DashboardData>(`/dashboard${q}`);
+    clientCache = { data, expiresAt: Date.now() + CLIENT_TTL_MS };
+    return data;
   },
-  async getCharts() {
-    return {
-      salesVsExpenses: mockSalesVsExpenses,
-      population: mockPopulationTrend,
-      gender: mockGenderDistribution,
-      status: mockStatusDistribution,
-      breeds: mockBreedDistribution,
-    };
-  },
-  async getActivities() {
-    return mockActivities;
-  },
-  async getNotifications() {
-    return mockNotifications;
-  },
-  async getSettings() {
-    return mockFarmSettings;
+
+  clearCache() {
+    clientCache = null;
   },
 };

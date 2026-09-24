@@ -12,6 +12,7 @@ import {
 import { partnerA, partnerB, superAdmin, mockUsers as seedUsers } from '@/data/mock/users';
 import type { Role, User } from '@/types/farm';
 import { canModify, isOwner, isSuperAdmin } from '@/lib/ownership';
+import { api, setToken } from '@/lib/api';
 
 type LoginPortal = 'user' | 'superuser';
 
@@ -20,12 +21,17 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
   users: User[];
-  login: (email: string, password: string, portal: LoginPortal) => { ok: boolean; message?: string };
+  login: (
+    email: string,
+    password: string,
+    portal: LoginPortal
+  ) => Promise<{ ok: boolean; message?: string }>;
   register: (data: { name: string; email: string; password: string }) => boolean;
   logout: () => void;
   createUser: (data: { name: string; email: string; phone?: string }) => { ok: boolean; message?: string };
   setUserStatus: (userId: string, status: 'Active' | 'Inactive') => void;
   switchPartner: (userId: string) => void;
+  refreshUser: (user: User) => void;
   isOwnerOf: (ownerId: string) => boolean;
   canModifyRecord: (ownerId: string) => boolean;
 }
@@ -33,9 +39,31 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = 'gfms-current-user';
+const USER_JSON_KEY = 'gfms-user-json';
 const AUTH_KEY = 'gfms-authenticated';
 const PORTAL_KEY = 'gfms-portal';
 const USERS_KEY = 'gfms-users';
+
+function mapApiUser(raw: {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  phone?: string | null;
+  status?: string;
+  createdBy?: string | null;
+}): User {
+  const role = (raw.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'USER') as Role;
+  return {
+    id: raw.id,
+    email: raw.email,
+    name: raw.name,
+    role,
+    phone: raw.phone ?? undefined,
+    status: (raw.status as 'Active' | 'Inactive' | undefined) ?? 'Active',
+    createdBy: raw.createdBy ?? undefined,
+  };
+}
 
 function findSeedUser(id: string | null): User {
   if (!id) return partnerA;
@@ -58,8 +86,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
 
-    const id = localStorage.getItem(STORAGE_KEY);
     const auth = localStorage.getItem(AUTH_KEY) === '1';
+    const rawUser = localStorage.getItem(USER_JSON_KEY);
+    if (auth && rawUser) {
+      try {
+        setCurrentUser(JSON.parse(rawUser) as User);
+        setIsAuthenticated(true);
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
+
+    const id = localStorage.getItem(STORAGE_KEY);
     setCurrentUser(findSeedUser(id));
     setIsAuthenticated(auth);
   }, []);
@@ -68,15 +107,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
   }, [users]);
 
-  const login = useCallback(
-    (email: string, _password: string, portal: LoginPortal) => {
-      const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
-      if (!user) {
-        return { ok: false, message: 'Account not found.' };
-      }
-      if (user.status === 'Inactive') {
-        return { ok: false, message: 'This account is inactive.' };
-      }
+  const login = useCallback(async (email: string, password: string, portal: LoginPortal) => {
+    try {
+      const result = await api.post<{
+        user: {
+          id: string;
+          email: string;
+          name: string;
+          role: string;
+          phone?: string | null;
+          status?: string;
+        };
+        token: string;
+      }>('/auth/login', { email: email.trim(), password });
+
+      const user = mapApiUser(result.user);
 
       if (portal === 'superuser' && user.role !== 'SUPER_ADMIN') {
         return {
@@ -90,16 +135,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           message: 'Super Admin must sign in at /superuser/login.',
         };
       }
+      if (user.status === 'Inactive') {
+        return { ok: false, message: 'This account is inactive.' };
+      }
 
+      setToken(result.token);
       setCurrentUser(user);
       setIsAuthenticated(true);
       localStorage.setItem(STORAGE_KEY, user.id);
+      localStorage.setItem(USER_JSON_KEY, JSON.stringify(user));
       localStorage.setItem(AUTH_KEY, '1');
       localStorage.setItem(PORTAL_KEY, portal);
+
+      setUsers((prev) => {
+        if (prev.some((u) => u.id === user.id)) {
+          return prev.map((u) => (u.id === user.id ? user : u));
+        }
+        return [...prev, user];
+      });
+
       return { ok: true };
-    },
-    [users]
-  );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed.';
+      if (message.toLowerCase().includes('invalid')) {
+        return { ok: false, message: 'Invalid email or password.' };
+      }
+      return { ok: false, message };
+    }
+  }, []);
 
   const register = useCallback((data: { name: string; email: string; password: string }) => {
     const exists = users.some((u) => u.email.toLowerCase() === data.email.toLowerCase());
@@ -117,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(user);
     setIsAuthenticated(true);
     localStorage.setItem(STORAGE_KEY, user.id);
+    localStorage.setItem(USER_JSON_KEY, JSON.stringify(user));
     localStorage.setItem(AUTH_KEY, '1');
     localStorage.setItem(PORTAL_KEY, 'user');
     return true;
@@ -124,8 +188,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     setIsAuthenticated(false);
+    setToken(null);
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(PORTAL_KEY);
+    localStorage.removeItem(USER_JSON_KEY);
   }, []);
 
   const createUser = useCallback(
@@ -161,10 +227,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!user || user.role === 'SUPER_ADMIN') return;
       setCurrentUser(user);
       localStorage.setItem(STORAGE_KEY, user.id);
+      localStorage.setItem(USER_JSON_KEY, JSON.stringify(user));
       localStorage.setItem(PORTAL_KEY, 'user');
     },
     [users]
   );
+
+  const refreshUser = useCallback((user: User) => {
+    setCurrentUser(user);
+    localStorage.setItem(STORAGE_KEY, user.id);
+    localStorage.setItem(USER_JSON_KEY, JSON.stringify(user));
+    setUsers((prev) => {
+      if (prev.some((u) => u.id === user.id)) {
+        return prev.map((u) => (u.id === user.id ? user : u));
+      }
+      return [...prev, user];
+    });
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -178,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createUser,
       setUserStatus,
       switchPartner,
+      refreshUser,
       isOwnerOf: (ownerId: string) => isOwner(ownerId, currentUser.id),
       canModifyRecord: (ownerId: string) => canModify(ownerId, currentUser),
     }),
@@ -191,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createUser,
       setUserStatus,
       switchPartner,
+      refreshUser,
     ]
   );
 
@@ -203,5 +284,4 @@ export function useAuth() {
   return ctx;
 }
 
-// keep named exports for seed references
 export { partnerA, partnerB, superAdmin };

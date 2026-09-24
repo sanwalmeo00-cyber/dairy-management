@@ -1,11 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { goatPurchasesService } from '@/services/finance';
-import { mockGoats } from '@/data/mock/goats';
 import { useAuth } from '@/context/AuthContext';
-import { useSoftDelete } from '@/context/SoftDeleteContext';
 import { useToast } from '@/context/ToastContext';
 import type { GoatPurchase } from '@/types/farm';
 import {
@@ -21,37 +18,41 @@ import {
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 
-function goatName(id: string) {
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
-
 export default function GoatPurchasesPage() {
-  const { canModifyRecord, isOwnerOf, currentUser } = useAuth();
-  const { softDelete, filterActive } = useSoftDelete();
+  const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<GoatPurchase[]>([]);
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void goatPurchasesService.getAll().then(setRows);
-  }, []);
-
-  const activeRows = useMemo(() => filterActive(rows, 'goat-purchase'), [rows, filterActive]);
+    void (async () => {
+      setLoading(true);
+      try {
+        setRows(await goatPurchasesService.getAll());
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to load goat purchases', 'error');
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return activeRows.filter((r) => {
+    return rows.filter((r) => {
       if (!q) return true;
       return (
-        goatName(r.goatId).toLowerCase().includes(q) ||
+        r.tagNumber.toLowerCase().includes(q) ||
         r.seller.toLowerCase().includes(q) ||
         r.paymentStatus.toLowerCase().includes(q)
       );
     });
-  }, [activeRows, search]);
+  }, [rows, search]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     const record = rows.find((r) => r.id === deleteId);
     if (!record || !canModifyRecord(record.ownerId)) {
@@ -59,15 +60,13 @@ export default function GoatPurchasesPage() {
       setDeleteId(null);
       return;
     }
-    softDelete({
-      entity: 'goat-purchase',
-      recordId: record.id,
-      label: `Purchase: ${goatName(record.goatId)} from ${record.seller}`,
-      ownerId: record.ownerId,
-      ownerName: record.ownerName,
-      deletedBy: currentUser,
-    });
-    toast('Marked as deleted — find it in Deleted tab');
+    try {
+      await goatPurchasesService.remove(record.id);
+      setRows((prev) => prev.filter((r) => r.id !== record.id));
+      toast('Goat purchase deleted');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    }
     setDeleteId(null);
   };
 
@@ -75,17 +74,33 @@ export default function GoatPurchasesPage() {
 
   return (
     <div>
-      <PageHeader title="Goat Purchases" description="Goats acquired from external sellers." action={{ label: 'Record Purchase', href: '/goat-purchases/new' }} />
+      <PageHeader
+        title="Goat Purchases"
+        description="Goats acquired from external sellers."
+        action={{ label: 'Record Purchase', href: '/goat-purchases/new' }}
+      />
       <div className="mb-4">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search goat, seller…" className="sm:max-w-xs" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search tag, seller…"
+          className="sm:max-w-xs"
+        />
       </div>
       <Table
         data={filtered}
         rowKey={(r) => r.id}
-        empty={<EmptyState title="No goat purchases" description="Record a purchase to track acquisition costs." />}
+        empty={
+          <EmptyState
+            title={loading ? 'Loading…' : 'No goat purchases'}
+            description={
+              loading ? 'Fetching from the server.' : 'Record a purchase to track acquisition costs.'
+            }
+          />
+        }
         columns={[
           { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
-          { key: 'goat', header: 'Goat', render: (r) => goatName(r.goatId) },
+          { key: 'tag', header: 'Tag No', render: (r) => r.tagNumber },
           { key: 'seller', header: 'Seller', render: (r) => r.seller },
           { key: 'price', header: 'Price', render: (r) => formatCurrency(r.purchasePrice) },
           {
@@ -104,22 +119,10 @@ export default function GoatPurchasesPage() {
             className: 'text-right',
             render: (r) => (
               <div className="flex justify-end gap-1">
-                <Link href={`/goats/${r.goatId}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
                 {canModifyRecord(r.ownerId) && (
-                  <>
-                    <Link href="/goat-purchases/new">
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </Link>
-                    <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
-                      Delete
-                    </Button>
-                  </>
+                  <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
+                    Delete
+                  </Button>
                 )}
               </div>
             ),
@@ -129,14 +132,14 @@ export default function GoatPurchasesPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         title="Delete goat purchase?"
         description={
           pending
-            ? `Purchase of “${goatName(pending.goatId)}” will be marked as deleted (not removed from the database). You can find it later in the Deleted tab.`
+            ? `Purchase of tag “${pending.tagNumber}” will be marked as deleted.`
             : 'This record will be marked as deleted.'
         }
-        confirmLabel="Mark deleted"
+        confirmLabel="Delete"
       />
     </div>
   );

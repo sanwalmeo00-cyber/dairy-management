@@ -4,38 +4,47 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { kidsService } from '@/services/kids';
-import { mockGoats } from '@/data/mock/goats';
+import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
 import { PageHeader, Card, Badge, statusTone, Button, ViewOnlyBanner, OwnerBadge } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import type { Kid } from '@/types/farm';
-
-function goatName(id: string) {
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
+import type { Goat, Kid } from '@/types/farm';
 
 export default function KidDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const [kid, setKid] = useState<Kid | null>(null);
+  const [goats, setGoats] = useState<Goat[]>([]);
 
   useEffect(() => {
     void kidsService.getById(id).then((k) => setKid(k ?? null));
+    void goatsService.getAll().then(setGoats);
   }, [id]);
 
   if (!kid) return <p className="text-sm text-muted-fg">Kid not found.</p>;
 
   const canEdit = canModifyRecord(kid.ownerId);
+  const goatTag = (goatId?: string) => {
+    if (!goatId) return '—';
+    return goats.find((g) => g.id === goatId)?.tagNumber ?? goatId;
+  };
 
   return (
     <div>
-      <PageHeader title={kid.name} description={`Tag ${kid.tagNumber}`}>
+      <PageHeader title={kid.tagNumber} description="Kid record">
         <Link href="/kids">
           <Button variant="outline">Back</Button>
         </Link>
       </PageHeader>
       {!canEdit && <ViewOnlyBanner ownerName={kid.ownerName} />}
       <OwnerBadge name={kid.ownerName} isOwn={isOwnerOf(kid.ownerId)} />
+
+      {kid.imageUrl && (
+        <Card className="mt-4 overflow-hidden p-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={kid.imageUrl} alt={kid.tagNumber} className="max-h-80 w-full object-cover" />
+        </Card>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card>
@@ -55,11 +64,11 @@ export default function KidDetailPage() {
             </div>
             <div>
               <dt className="text-muted-fg">Mother</dt>
-              <dd>{goatName(kid.motherId)}</dd>
+              <dd>{goatTag(kid.motherId)}</dd>
             </div>
             <div>
               <dt className="text-muted-fg">Father</dt>
-              <dd>{goatName(kid.fatherId)}</dd>
+              <dd>{goatTag(kid.fatherId)}</dd>
             </div>
           </dl>
         </Card>

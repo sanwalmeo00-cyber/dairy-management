@@ -7,14 +7,10 @@ import {
   HeartHandshake,
   Baby,
   ShoppingBag,
-  ShoppingCart,
   TrendingUp,
   Wallet,
-  CreditCard,
   Users,
   Package,
-  Boxes,
-  BarChart3,
   Settings,
   Trash2,
   UserCog,
@@ -47,27 +43,20 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       label: 'Finance',
       items: [
         { href: '/goat-purchases', label: 'Goat Purchases', icon: ShoppingBag },
-        { href: '/purchases', label: 'Purchases', icon: ShoppingCart },
         { href: '/sales', label: 'Sales', icon: TrendingUp },
         { href: '/expenses', label: 'Expenses', icon: Wallet },
-        { href: '/payments', label: 'Payments', icon: CreditCard },
       ],
     },
     {
       label: 'Management',
       items: [
         { href: '/workers', label: 'Workers', icon: Users },
-        { href: '/stock', label: 'Stock', icon: Boxes },
         { href: '/inventory', label: 'Inventory', icon: Package },
         ...(isSuperAdmin
           ? [{ href: '/users', label: 'Users', icon: UserCog }]
           : []),
         { href: '/deleted', label: 'Deleted', icon: Trash2 },
       ],
-    },
-    {
-      label: 'Reports',
-      items: [{ href: '/reports', label: 'Reports', icon: BarChart3 }],
     },
     {
       label: 'System',
@@ -93,11 +82,11 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
           <div>
-            <p className="font-[family-name:var(--font-display)] text-lg font-semibold tracking-tight text-white">
-              Green Meadow
+            <p className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-wide text-white">
+              SMS DAIRY FARM
             </p>
             <p className="text-xs text-sidebar-muted">
-              {isSuperAdmin ? 'Super Admin' : 'Goat Farm Management'}
+              {isSuperAdmin ? 'Super Admin' : 'Dairy Farm Management'}
             </p>
           </div>
           <button type="button" className="lg:hidden" onClick={onClose} aria-label="Close">

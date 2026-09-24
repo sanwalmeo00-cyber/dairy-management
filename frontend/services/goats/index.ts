@@ -1,11 +1,44 @@
-import { mockGoats } from '@/data/mock/goats';
+import { api } from '@/lib/api';
 import type { Goat } from '@/types/farm';
+
+export type GoatInput = {
+  tagNumber: string;
+  breed: string;
+  gender: 'Male' | 'Female';
+  dateOfBirth: string;
+  purchaseDate?: string | null;
+  purchasePrice?: number | null;
+  currentValue: number;
+  weight: number;
+  color: string;
+  healthStatus: string;
+  vaccinationStatus: string;
+  status: string;
+  imageUrl?: string | null;
+  notes?: string | null;
+  fatherId?: string | null;
+  motherId?: string | null;
+  name?: string;
+};
 
 export const goatsService = {
   async getAll(): Promise<Goat[]> {
-    return [...mockGoats];
+    return api.get<Goat[]>('/goats');
   },
   async getById(id: string): Promise<Goat | undefined> {
-    return mockGoats.find((g) => g.id === id);
+    try {
+      return await api.get<Goat>(`/goats/${id}`);
+    } catch {
+      return undefined;
+    }
+  },
+  async create(input: GoatInput): Promise<Goat> {
+    return api.post<Goat>('/goats', input);
+  },
+  async update(id: string, input: Partial<GoatInput>): Promise<Goat> {
+    return api.patch<Goat>(`/goats/${id}`, input);
+  },
+  async remove(id: string): Promise<Goat> {
+    return api.delete<Goat>(`/goats/${id}`);
   },
 };
