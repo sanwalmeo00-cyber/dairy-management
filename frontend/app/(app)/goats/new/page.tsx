@@ -42,7 +42,7 @@ export default function NewGoatPage() {
 
   return (
     <div>
-      <PageHeader title="Add Goat" description={`New record will be owned by ${currentUser.name}.`} />
+      <PageHeader title="Add Animal" description={`New record will be owned by ${currentUser.name}.`} />
 
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">

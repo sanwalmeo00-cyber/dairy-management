@@ -24,7 +24,7 @@ export default function NewGoatPurchasePage() {
         paymentStatus: String(fd.get('paymentStatus')),
         notes: String(fd.get('notes') ?? '') || null,
       });
-      toast(`Goat purchase saved for ${currentUser.name}`);
+      toast(`Animal purchase saved for ${currentUser.name}`);
       router.push('/goat-purchases');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to save goat purchase', 'error');
@@ -33,7 +33,7 @@ export default function NewGoatPurchasePage() {
 
   return (
     <div>
-      <PageHeader title="Record Goat Purchase" description={`Owned by ${currentUser.name}.`} />
+      <PageHeader title="Record Animal Purchase" description={`Owned by ${currentUser.name}.`} />
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
           <Input name="date" label="Purchase Date" type="date" required />

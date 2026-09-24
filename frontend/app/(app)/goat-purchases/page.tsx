@@ -32,7 +32,7 @@ export default function GoatPurchasesPage() {
       try {
         setRows(await goatPurchasesService.getAll());
       } catch (err) {
-        toast(err instanceof Error ? err.message : 'Failed to load goat purchases', 'error');
+        toast(err instanceof Error ? err.message : 'Failed to load animal purchases', 'error');
         setRows([]);
       } finally {
         setLoading(false);
@@ -63,7 +63,7 @@ export default function GoatPurchasesPage() {
     try {
       await goatPurchasesService.remove(record.id);
       setRows((prev) => prev.filter((r) => r.id !== record.id));
-      toast('Goat purchase deleted');
+      toast('Animal purchase deleted');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Delete failed', 'error');
     }
@@ -75,8 +75,8 @@ export default function GoatPurchasesPage() {
   return (
     <div>
       <PageHeader
-        title="Goat Purchases"
-        description="Goats acquired from external sellers."
+        title="Animal Purchases"
+        description="Animals acquired from external sellers."
         action={{ label: 'Record Purchase', href: '/goat-purchases/new' }}
       />
       <div className="mb-4">
@@ -92,7 +92,7 @@ export default function GoatPurchasesPage() {
         rowKey={(r) => r.id}
         empty={
           <EmptyState
-            title={loading ? 'Loading…' : 'No goat purchases'}
+            title={loading ? 'Loading…' : 'No animal purchases'}
             description={
               loading ? 'Fetching from the server.' : 'Record a purchase to track acquisition costs.'
             }
@@ -133,7 +133,7 @@ export default function GoatPurchasesPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={() => void confirmDelete()}
-        title="Delete goat purchase?"
+        title="Delete animal purchase?"
         description={
           pending
             ? `Purchase of tag “${pending.tagNumber}” will be marked as deleted.`

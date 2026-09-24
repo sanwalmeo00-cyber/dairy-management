@@ -16,22 +16,26 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close overlay"
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-lg rounded-xl border border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h3 className="text-lg font-semibold">{title}</h3>
+      <div className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-xl border border-border bg-card shadow-xl sm:rounded-xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5 sm:py-4">
+          <h3 className="text-base font-semibold sm:text-lg">{title}</h3>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="px-5 py-4">{children}</div>
-        {footer && <div className="border-t border-border px-5 py-4">{footer}</div>}
+        <div className="overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        {footer && (
+          <div className="shrink-0 border-t border-border px-4 py-3 sm:px-5 sm:py-4">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -62,12 +66,13 @@ export function ConfirmDialog({
       onClose={onClose}
       title={title}
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={onClose}>
             Cancel
           </Button>
           <Button
             variant={confirmVariant}
+            className="w-full sm:w-auto"
             onClick={() => {
               onConfirm();
               onClose();

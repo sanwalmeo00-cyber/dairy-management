@@ -9,7 +9,12 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cn('rounded-xl border border-border bg-card p-5 shadow-sm', className)}>
+    <div
+      className={cn(
+        'rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5',
+        className
+      )}
+    >
       {children}
     </div>
   );
@@ -28,15 +33,15 @@ export function StatCard({
 }) {
   return (
     <Card className="flex items-start justify-between gap-3">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm text-muted-fg">{label}</p>
-        <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight">
+        <p className="mt-1 truncate font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight sm:text-2xl">
           {value}
         </p>
         {hint && <p className="mt-1 text-xs text-muted-fg">{hint}</p>}
       </div>
       {icon && (
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10">
           {icon}
         </div>
       )}

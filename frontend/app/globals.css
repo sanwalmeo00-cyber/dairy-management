@@ -57,10 +57,33 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body), system-ui, sans-serif;
+}
+
+a,
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+summary,
+select,
+label[for],
+input[type='checkbox'],
+input[type='radio'],
+input[type='file'] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 h1,

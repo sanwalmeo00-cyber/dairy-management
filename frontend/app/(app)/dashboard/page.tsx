@@ -60,7 +60,7 @@ export default function DashboardPage() {
   if (!data) {
     return (
       <div>
-        <PageHeader title="Dashboard" description="Overview of your goat farm operations." />
+        <PageHeader title="Dashboard" description="Overview of your farm operations." />
         <p className="text-sm text-muted-fg">Could not load dashboard data.</p>
         <Button className="mt-3" onClick={() => void load(true)}>
           Retry
@@ -72,7 +72,7 @@ export default function DashboardPage() {
   const { stats, charts, activities } = data;
 
   const quickActions = [
-    { label: 'Add Goat', href: '/goats/new' },
+    { label: 'Add Animal', href: '/goats/new' },
     { label: 'Record Sale', href: '/sales/new' },
     { label: 'Add Expense', href: '/expenses/new' },
     { label: 'Plan Breeding', href: '/breeding/new' },
@@ -81,7 +81,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Overview of your goat farm operations.">
+      <PageHeader title="Dashboard" description="Overview of your farm operations.">
         <Button variant="outline" onClick={() => void load(true)}>
           Refresh
         </Button>
@@ -89,7 +89,7 @@ export default function DashboardPage() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
-          label="Total Goats"
+          label="Total Animals"
           value={String(stats.totalGoats)}
           hint={`${stats.activeGoats} active`}
           icon={<Rabbit className="h-5 w-5" />}
@@ -115,13 +115,13 @@ export default function DashboardPage() {
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="mb-4 font-semibold">Sales vs Expenses</h2>
-          <div className="h-64">
+          <div className="h-56 w-full min-w-0 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={charts.salesVsExpenses}>
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+              <BarChart data={charts.salesVsExpenses} margin={{ left: -10, right: 8 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={48} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="sales" fill="#2d5a3d" name="Sales" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" fill="#c4a35a" name="Expenses" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -130,13 +130,13 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <h2 className="mb-4 font-semibold">Population Trend</h2>
-          <div className="h-64">
+          <div className="h-56 w-full min-w-0 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={charts.population}>
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+              <LineChart data={charts.population} margin={{ left: -10, right: 8 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={36} />
                 <Tooltip />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="adults" stroke="#2d5a3d" name="Adults" strokeWidth={2} />
                 <Line type="monotone" dataKey="kids" stroke="#c4a35a" name="Kids" strokeWidth={2} />
               </LineChart>
@@ -145,7 +145,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <h2 className="mb-4 font-semibold">Gender Distribution</h2>
-          <div className="h-64">
+          <div className="h-56 w-full min-w-0 sm:h-64">
             {charts.gender.length === 0 ? (
               <p className="text-sm text-muted-fg">No goats yet.</p>
             ) : (
@@ -157,7 +157,7 @@ export default function DashboardPage() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={90}
+                    outerRadius={70}
                     label
                   >
                     {charts.gender.map((_, i) => (
@@ -165,15 +165,15 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             )}
           </div>
         </Card>
         <Card>
-          <h2 className="mb-4 font-semibold">Goat Status</h2>
-          <div className="h-64">
+          <h2 className="mb-4 font-semibold">Animal Status</h2>
+          <div className="h-56 w-full min-w-0 sm:h-64">
             {charts.status.length === 0 ? (
               <p className="text-sm text-muted-fg">No goats yet.</p>
             ) : (
@@ -185,7 +185,7 @@ export default function DashboardPage() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={90}
+                    outerRadius={70}
                     label
                   >
                     {charts.status.map((_, i) => (
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
             )}
@@ -211,9 +211,9 @@ export default function DashboardPage() {
               {activities.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0"
+                  className="flex flex-col gap-1 border-b border-border pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
                 >
-                  <p className="text-sm">{a.message}</p>
+                  <p className="min-w-0 text-sm break-words">{a.message}</p>
                   <span className="shrink-0 text-xs text-muted-fg">{a.timeAgo}</span>
                 </li>
               ))}

@@ -144,7 +144,7 @@ export default function UsersPage() {
             value={search}
             onChange={setSearch}
             placeholder="Search users…"
-            className="mb-4 max-w-sm"
+            className="mb-4 w-full sm:max-w-sm"
           />
           <Table
             data={filtered}
