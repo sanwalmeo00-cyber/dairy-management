@@ -25,7 +25,7 @@ export function Select({
 }: SelectProps) {
   const selectId = id ?? props.name;
   return (
-    <div className="space-y-1.5">
+    <div className={cn('w-full space-y-1.5', className)}>
       {label && (
         <label htmlFor={selectId} className="block text-sm font-medium text-foreground">
           {label}
@@ -37,8 +37,7 @@ export function Select({
         required={required}
         className={cn(
           'h-10 w-full rounded-lg border border-border bg-card px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/20',
-          error && 'border-danger',
-          className
+          error && 'border-danger'
         )}
         {...props}
       >

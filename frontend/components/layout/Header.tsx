@@ -1,7 +1,7 @@
 'use client';
 
 import { Bell, Menu, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -21,6 +21,17 @@ export function Header({ onMenuClick }: HeaderProps) {
   const unread = mockNotifications.filter((n) => !n.read).length;
   const switchableUsers = users.filter((u) => u.role === 'USER' && u.status !== 'Inactive');
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setNotifOpen(false);
+        setUserOpen(false);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   function handleLogout() {
     const portal = isSuperAdmin ? 'superuser' : 'user';
     logout();
@@ -28,10 +39,10 @@ export function Header({ onMenuClick }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:h-16 sm:gap-3 sm:px-6">
       <button
         type="button"
-        className="rounded-lg p-2 hover:bg-muted lg:hidden"
+        className="shrink-0 rounded-lg p-2 hover:bg-muted lg:hidden"
         onClick={onMenuClick}
         aria-label="Open menu"
       >
@@ -41,12 +52,12 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="relative hidden max-w-md flex-1 md:block">
         <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-fg" />
         <input
-          placeholder="Search goats, sales, workers…"
+          placeholder="Search tags, sales, workers…"
           className="h-10 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
         />
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 items-center gap-1 sm:gap-2">
         <div className="relative">
           <button
             type="button"
@@ -63,89 +74,107 @@ export function Header({ onMenuClick }: HeaderProps) {
             )}
           </button>
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-border bg-card p-2 shadow-lg">
-              <p className="px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-fg uppercase">
-                Notifications
-              </p>
-              {mockNotifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`rounded-lg px-3 py-2 ${n.read ? '' : 'bg-primary/5'}`}
-                >
-                  <p className="text-sm font-medium">{n.title}</p>
-                  <p className="text-xs text-muted-fg">{n.message}</p>
-                  <p className="mt-1 text-[11px] text-muted-fg">{n.timeAgo}</p>
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 sm:hidden"
+                aria-label="Close notifications"
+                onClick={() => setNotifOpen(false)}
+              />
+              <div className="absolute right-0 z-50 mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-2 shadow-lg">
+                <p className="px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-fg uppercase">
+                  Notifications
+                </p>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {mockNotifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`rounded-lg px-3 py-2 ${n.read ? '' : 'bg-primary/5'}`}
+                    >
+                      <p className="text-sm font-medium">{n.title}</p>
+                      <p className="text-xs text-muted-fg">{n.message}</p>
+                      <p className="mt-1 text-[11px] text-muted-fg">{n.timeAgo}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
 
         <div className="relative">
           <button
             type="button"
-            className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted"
+            className="flex max-w-[10rem] items-center gap-2 rounded-lg px-1.5 py-1.5 hover:bg-muted sm:max-w-none sm:px-2"
             onClick={() => {
               setUserOpen((v) => !v);
               setNotifOpen(false);
             }}
           >
             <Avatar name={currentUser.name} />
-            <div className="hidden text-left sm:block">
-              <p className="text-sm font-medium leading-none">{currentUser.name}</p>
-              <p className="mt-0.5 text-[11px] text-muted-fg">{currentUser.role}</p>
+            <div className="hidden min-w-0 text-left sm:block">
+              <p className="truncate text-sm font-medium leading-none">{currentUser.name}</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-fg">{currentUser.role}</p>
             </div>
           </button>
           {userOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-card p-2 shadow-lg">
-              {!isSuperAdmin && (
-                <>
-                  <p className="px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-fg uppercase">
-                    Switch user (mock)
-                  </p>
-                  {switchableUsers.map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${
-                        u.id === currentUser.id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => {
-                        switchPartner(u.id);
-                        setUserOpen(false);
-                        toast(`Switched to ${u.name}`, 'info');
-                      }}
-                    >
-                      <Avatar name={u.name} />
-                      <span>
-                        <span className="block font-medium">{u.name}</span>
-                        <span className="text-xs text-muted-fg">{u.email}</span>
-                      </span>
-                    </button>
-                  ))}
-                  <div className="my-1 border-t border-border" />
-                </>
-              )}
-              <Link
-                href="/settings"
-                className="block rounded-lg px-3 py-2 text-sm hover:bg-muted"
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 sm:hidden"
+                aria-label="Close user menu"
                 onClick={() => setUserOpen(false)}
-              >
-                Settings
-              </Link>
-              {isSuperAdmin && (
+              />
+              <div className="absolute right-0 z-50 mt-2 w-[min(16rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-2 shadow-lg">
+                {!isSuperAdmin && (
+                  <>
+                    <p className="px-2 py-1.5 text-xs font-semibold tracking-wide text-muted-fg uppercase">
+                      Switch user (mock)
+                    </p>
+                    {switchableUsers.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted ${
+                          u.id === currentUser.id ? 'bg-muted' : ''
+                        }`}
+                        onClick={() => {
+                          switchPartner(u.id);
+                          setUserOpen(false);
+                          toast(`Switched to ${u.name}`, 'info');
+                        }}
+                      >
+                        <Avatar name={u.name} />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{u.name}</span>
+                          <span className="block truncate text-xs text-muted-fg">{u.email}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-border" />
+                  </>
+                )}
                 <Link
-                  href="/users"
+                  href="/settings"
                   className="block rounded-lg px-3 py-2 text-sm hover:bg-muted"
                   onClick={() => setUserOpen(false)}
                 >
-                  Manage Users
+                  Settings
                 </Link>
-              )}
-              <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
-                Logout
-              </Button>
-            </div>
+                {isSuperAdmin && (
+                  <Link
+                    href="/users"
+                    className="block rounded-lg px-3 py-2 text-sm hover:bg-muted"
+                    onClick={() => setUserOpen(false)}
+                  >
+                    Manage Users
+                  </Link>
+                )}
+                <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+                  Logout
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </div>

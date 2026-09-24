@@ -35,7 +35,7 @@ export default function GoatsPage() {
     try {
       setRows(await goatsService.getAll());
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Failed to load goats', 'error');
+      toast(err instanceof Error ? err.message : 'Failed to load animals', 'error');
       setRows([]);
     } finally {
       setLoading(false);
@@ -68,7 +68,7 @@ export default function GoatsPage() {
     try {
       await goatsService.remove(goat.id);
       setRows((prev) => prev.filter((g) => g.id !== goat.id));
-      toast('Goat deleted');
+      toast('Animal deleted');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Delete failed', 'error');
     }
@@ -80,9 +80,9 @@ export default function GoatsPage() {
   return (
     <div>
       <PageHeader
-        title="Goats"
-        description="Manage your herd — tags, health, and ownership."
-        action={{ label: 'Add Goat', href: '/goats/new' }}
+        title="Animals"
+        description="Manage animals by tag — health, status, and ownership."
+        action={{ label: 'Add Animal', href: '/goats/new' }}
       />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -120,8 +120,8 @@ export default function GoatsPage() {
         rowKey={(g) => g.id}
         empty={
           <EmptyState
-            title={loading ? 'Loading…' : 'No goats found'}
-            description={loading ? 'Fetching herd from the server.' : 'Try adjusting filters or add a new goat.'}
+            title={loading ? 'Loading…' : 'No animals found'}
+            description={loading ? 'Fetching animals from the server.' : 'Try adjusting filters or add a new animal.'}
           />
         }
         columns={[
@@ -184,7 +184,7 @@ export default function GoatsPage() {
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
         onConfirm={() => void confirmDelete()}
-        title="Delete goat?"
+        title="Delete animal?"
         description={
           pending
             ? `Tag “${pending.tagNumber}” will be marked as deleted.`

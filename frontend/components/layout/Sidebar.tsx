@@ -34,7 +34,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       label: 'Main',
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/goats', label: 'Goats', icon: Rabbit },
+        { href: '/goats', label: 'Animals', icon: Rabbit },
         { href: '/breeding', label: 'Breeding', icon: HeartHandshake },
         { href: '/kids', label: 'Kids', icon: Baby },
       ],
@@ -42,7 +42,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     {
       label: 'Finance',
       items: [
-        { href: '/goat-purchases', label: 'Goat Purchases', icon: ShoppingBag },
+        { href: '/goat-purchases', label: 'Animal Purchases', icon: ShoppingBag },
         { href: '/sales', label: 'Sales', icon: TrendingUp },
         { href: '/expenses', label: 'Expenses', icon: Wallet },
       ],
@@ -81,15 +81,15 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
-          <div>
-            <p className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-wide text-white">
+          <div className="min-w-0">
+            <p className="truncate font-[family-name:var(--font-display)] text-lg font-semibold tracking-wide text-white sm:text-xl">
               SMS DAIRY FARM
             </p>
-            <p className="text-xs text-sidebar-muted">
+            <p className="truncate text-xs text-sidebar-muted">
               {isSuperAdmin ? 'Super Admin' : 'Dairy Farm Management'}
             </p>
           </div>
-          <button type="button" className="lg:hidden" onClick={onClose} aria-label="Close">
+          <button type="button" className="shrink-0 lg:hidden" onClick={onClose} aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
