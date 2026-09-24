@@ -4,32 +4,31 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { breedingService } from '@/services/breeding';
-import { mockGoats } from '@/data/mock/goats';
+import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
 import { PageHeader, Card, Badge, statusTone, Button, ViewOnlyBanner, OwnerBadge } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import type { Breeding } from '@/types/farm';
-
-function goatName(id: string) {
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
+import type { Breeding, Goat } from '@/types/farm';
 
 export default function BreedingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const [record, setRecord] = useState<Breeding | null>(null);
+  const [goats, setGoats] = useState<Goat[]>([]);
 
   useEffect(() => {
     void breedingService.getById(id).then((b) => setRecord(b ?? null));
+    void goatsService.getAll().then(setGoats);
   }, [id]);
 
   if (!record) return <p className="text-sm text-muted-fg">Record not found.</p>;
 
   const canEdit = canModifyRecord(record.ownerId);
+  const goatTag = (goatId: string) => goats.find((g) => g.id === goatId)?.tagNumber ?? goatId;
 
   return (
     <div>
-      <PageHeader title="Breeding Record" description={`${goatName(record.femaleGoatId)} × ${goatName(record.maleGoatId)}`}>
+      <PageHeader title="Breeding Record" description={`Female ${goatTag(record.femaleGoatId)}`}>
         <Link href="/breeding">
           <Button variant="outline">Back</Button>
         </Link>

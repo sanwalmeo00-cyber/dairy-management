@@ -2,20 +2,42 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { PageHeader, Card, Input, Select, Textarea, Button } from '@/components/ui';
+import { goatsService } from '@/services/goats';
+import { PageHeader, Card, Input, Select, Textarea, Button, ImageUpload } from '@/components/ui';
 import type { GoatStatus, HealthStatus, VaccinationStatus } from '@/types/farm';
 
 export default function NewGoatPage() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const { toast } = useToast();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast(`Goat saved for ${currentUser.name} (mock)`);
-    router.push('/goats');
+    const fd = new FormData(e.currentTarget);
+    try {
+      await goatsService.create({
+        tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+        breed: String(fd.get('breed') ?? '').trim(),
+        gender: String(fd.get('gender')) as 'Male' | 'Female',
+        dateOfBirth: String(fd.get('dateOfBirth')),
+        weight: Number(fd.get('weight')),
+        color: String(fd.get('color') ?? '').trim(),
+        currentValue: Number(fd.get('currentValue')),
+        healthStatus: String(fd.get('healthStatus')),
+        vaccinationStatus: String(fd.get('vaccinationStatus')),
+        status: String(fd.get('status')),
+        imageUrl,
+        notes: String(fd.get('notes') ?? '') || null,
+      });
+      toast(`Goat saved for ${currentUser.name}`);
+      router.push('/goats');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to save goat', 'error');
+    }
   };
 
   return (
@@ -23,9 +45,11 @@ export default function NewGoatPage() {
       <PageHeader title="Add Goat" description={`New record will be owned by ${currentUser.name}.`} />
 
       <Card>
-        <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <ImageUpload folder="goats" value={imageUrl} onChange={setImageUrl} />
+          </div>
           <Input name="tagNumber" label="Tag Number" required />
-          <Input name="name" label="Name" required />
           <Input name="breed" label="Breed" required />
           <Select
             name="gender"

@@ -10,6 +10,8 @@ export const mockWorkers: Worker[] = [
     joiningDate: '2023-03-01',
     status: 'Active',
     notes: 'Handles daily herd checks.',
+    ownerId: 'user-1',
+    ownerName: 'Partner A',
   },
   {
     id: 'w-2',
@@ -19,6 +21,8 @@ export const mockWorkers: Worker[] = [
     salary: 25000,
     joiningDate: '2024-01-15',
     status: 'Active',
+    ownerId: 'user-1',
+    ownerName: 'Partner A',
   },
   {
     id: 'w-3',
@@ -29,5 +33,7 @@ export const mockWorkers: Worker[] = [
     joiningDate: '2022-08-10',
     status: 'Inactive',
     notes: 'Left for personal reasons.',
+    ownerId: 'user-2',
+    ownerName: 'Partner B',
   },
 ];

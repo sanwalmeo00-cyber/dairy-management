@@ -88,7 +88,7 @@ export interface User {
 export interface Goat extends OwnedRecord {
   id: string;
   tagNumber: string;
-  name: string;
+  name?: string;
   breed: string;
   gender: GoatGender;
   dateOfBirth: string;
@@ -109,7 +109,7 @@ export interface Goat extends OwnedRecord {
 export interface Breeding extends OwnedRecord {
   id: string;
   femaleGoatId: string;
-  maleGoatId: string;
+  maleGoatId?: string;
   breedingDate: string;
   expectedDueDate: string;
   actualBirthDate?: string;
@@ -121,15 +121,16 @@ export interface Breeding extends OwnedRecord {
 export interface Kid extends OwnedRecord {
   id: string;
   tagNumber: string;
-  name: string;
+  name?: string;
   gender: GoatGender;
   dateOfBirth: string;
   motherId: string;
-  fatherId: string;
+  fatherId?: string;
   weight: number;
   healthStatus: HealthStatus;
   vaccinationStatus: VaccinationStatus;
   status: GoatStatus;
+  imageUrl?: string;
   notes?: string;
   breedingId?: string;
 }
@@ -137,7 +138,8 @@ export interface Kid extends OwnedRecord {
 export interface GoatPurchase extends OwnedRecord {
   id: string;
   date: string;
-  goatId: string;
+  tagNumber: string;
+  goatId?: string;
   seller: string;
   purchasePrice: number;
   paymentStatus: PaymentStatus;
@@ -161,7 +163,7 @@ export interface Purchase extends OwnedRecord {
 export interface Sale extends OwnedRecord {
   id: string;
   date: string;
-  goatId: string;
+  tagNumber: string;
   buyer: string;
   salePrice: number;
   paymentStatus: PaymentStatus;
@@ -179,7 +181,7 @@ export interface Expense extends OwnedRecord {
   notes?: string;
 }
 
-export interface Worker {
+export interface Worker extends OwnedRecord {
   id: string;
   name: string;
   phone: string;
@@ -194,10 +196,23 @@ export interface WorkerPayment extends OwnedRecord {
   id: string;
   workerId: string;
   date: string;
+  forMonth: string;
   type: WorkerPaymentType;
   amount: number;
   paymentMethod: PaymentMethod;
   notes?: string;
+}
+
+export interface WorkerMonthSummary {
+  workerId: string;
+  month: string;
+  monthlySalary: number;
+  advances: number;
+  salaryPaid: number;
+  bonuses: number;
+  other: number;
+  balanceDue: number;
+  totalPaid: number;
 }
 
 export interface Transaction extends OwnedRecord {
@@ -210,7 +225,7 @@ export interface Transaction extends OwnedRecord {
   status: PaymentStatus;
 }
 
-export interface InventoryItem {
+export interface InventoryItem extends OwnedRecord {
   id: string;
   name: string;
   category: InventoryCategory;
@@ -218,12 +233,16 @@ export interface InventoryItem {
   unit: string;
   minimumStock: number;
   cost: number;
+  dailyUsage?: number;
+  daysLeft?: number | null;
+  expiryDate?: string;
+  expiryStatus?: 'Expired' | 'Expiring soon' | 'Ok' | null;
   supplier?: string;
   notes?: string;
   status: StockStatus;
 }
 
-export interface InventoryTransaction {
+export interface InventoryTransaction extends OwnedRecord {
   id: string;
   itemId: string;
   date: string;

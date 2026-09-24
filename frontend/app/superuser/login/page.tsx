@@ -17,7 +17,7 @@ export default function SuperUserLoginPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
 
@@ -28,10 +28,10 @@ export default function SuperUserLoginPage() {
       return;
     }
 
-    const result = login(email, password, 'superuser');
+    const result = await login(email, password, 'superuser');
     if (!result.ok) {
       const message = result.message ?? 'Login failed.';
-      if (message.toLowerCase().includes('account not found')) {
+      if (message.toLowerCase().includes('account not found') || message.toLowerCase().includes('invalid')) {
         setFieldErrors({
           email: 'No Super Admin account found with this email.',
         });
@@ -56,18 +56,26 @@ export default function SuperUserLoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/images/login-farm-goats.jpg')" }}
+        aria-hidden
+      />
+      <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse at 10% 0%, #1a2e22 0%, transparent 45%), radial-gradient(ellipse at 90% 100%, #2d5a3d55 0%, transparent 40%), #0f1a14',
+            'linear-gradient(160deg, rgba(15, 26, 20, 0.72) 0%, rgba(26, 46, 34, 0.55) 50%, rgba(15, 26, 20, 0.7) 100%)',
         }}
+        aria-hidden
       />
-      <Card className="relative z-10 w-full max-w-md border-primary/20">
-        <div className="mb-6">
-          <p className="text-sm font-medium text-primary">Green Meadow · Admin</p>
+      <Card className="relative z-10 w-full max-w-md border-white/30 bg-white/95 shadow-lg backdrop-blur-sm">
+        <div className="mb-6 text-center">
+          <p className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-wide text-primary">
+            SMS DAIRY FARM
+          </p>
           <h1 className="mt-1 text-2xl font-semibold">Super Admin login</h1>
           <p className="mt-1 text-sm text-muted-fg">
-            Mock — superadmin@example.com (create users, view deleted data)
+            Sign in with your Super Admin credentials
           </p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>

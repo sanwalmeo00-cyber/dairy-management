@@ -18,7 +18,7 @@ function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError('');
 
@@ -29,18 +29,16 @@ function LoginForm() {
       return;
     }
 
-    const result = login(email, password, 'user');
+    const result = await login(email, password, 'user');
     if (!result.ok) {
       const message = result.message ?? 'Login failed.';
-      if (message.toLowerCase().includes('account not found')) {
-        setFieldErrors({
-          email: 'No account found with this email. Check the spelling or register.',
-        });
-      } else if (message.toLowerCase().includes('inactive')) {
+      if (message.toLowerCase().includes('inactive')) {
         setFieldErrors({ email: 'This account is inactive. Contact Super Admin.' });
       } else if (message.toLowerCase().includes('super admin')) {
         setFormError(message);
         setFieldErrors({});
+      } else if (message.toLowerCase().includes('invalid')) {
+        setFieldErrors({ password: 'Wrong email or password. Contact Super Admin if you forgot it.' });
       } else {
         setFieldErrors({ password: message });
       }
@@ -53,12 +51,14 @@ function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <div className="mb-6">
-        <p className="text-sm font-medium text-primary">Green Meadow</p>
+    <Card className="w-full max-w-md border-white/40 bg-white/95 shadow-lg backdrop-blur-sm">
+      <div className="mb-6 text-center">
+        <p className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-wide text-primary">
+          SMS DAIRY FARM
+        </p>
         <h1 className="mt-1 text-2xl font-semibold">User sign in</h1>
         <p className="mt-1 text-sm text-muted-fg">
-          For farm users — try partnera@example.com or partnerb@example.com
+          Sign in with credentials from Super Admin
         </p>
       </div>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -96,14 +96,6 @@ function LoginForm() {
           Login
         </Button>
       </form>
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <Link href="/forgot-password" className="text-primary hover:underline">
-          Forgot Password
-        </Link>
-        <Link href="/register" className="text-primary hover:underline">
-          Go to Register
-        </Link>
-      </div>
       <p className="mt-6 border-t border-border pt-4 text-center text-xs text-muted-fg">
         Super Admin?{' '}
         <Link href="/superuser/login" className="font-medium text-primary hover:underline">
@@ -118,14 +110,20 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/images/login-farm-goats.jpg')" }}
+        aria-hidden
+      />
+      <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse at 20% 20%, #dce8d8 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, #e8dfc8 0%, transparent 45%), #f4f6f2',
+            'linear-gradient(160deg, rgba(26, 36, 24, 0.55) 0%, rgba(45, 90, 61, 0.35) 45%, rgba(26, 36, 24, 0.5) 100%)',
         }}
+        aria-hidden
       />
       <div className="relative z-10 w-full max-w-md">
-        <Suspense fallback={<Card className="w-full max-w-md p-8">Loading…</Card>}>
+        <Suspense fallback={<Card className="w-full max-w-md bg-white/95 p-8 backdrop-blur-sm">Loading…</Card>}>
           <LoginForm />
         </Suspense>
       </div>

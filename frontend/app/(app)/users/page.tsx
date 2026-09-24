@@ -1,9 +1,11 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { usersService } from '@/services/users';
+import type { User } from '@/types/farm';
 import {
   PageHeader,
   SearchInput,
@@ -17,24 +19,41 @@ import {
 } from '@/components/ui';
 
 export default function UsersPage() {
-  const { isSuperAdmin, users, createUser, setUserStatus, currentUser } = useAuth();
+  const { isSuperAdmin, currentUser } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      setUsers(await usersService.getAll());
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to load users', 'error');
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (!isSuperAdmin) {
       router.replace('/dashboard');
+      return;
     }
-  }, [isSuperAdmin, router]);
+    void loadUsers();
+  }, [isSuperAdmin, router, loadUsers]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return users.filter((u) => {
-      if (u.role === 'SUPER_ADMIN') return true;
       if (!q) return true;
       return (
         u.name.toLowerCase().includes(q) ||
@@ -44,17 +63,38 @@ export default function UsersPage() {
     });
   }, [users, search]);
 
-  function onCreate(e: FormEvent) {
+  async function onCreate(e: FormEvent) {
     e.preventDefault();
-    const result = createUser({ name, email, phone: phone || undefined });
-    if (!result.ok) {
-      toast(result.message ?? 'Could not create user', 'error');
-      return;
+    setSaving(true);
+    try {
+      const created = await usersService.create({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        password,
+      });
+      setUsers((prev) => [created, ...prev]);
+      toast(`User created. Share email + password with ${created.name}.`);
+      setName('');
+      setEmail('');
+      setPhone('');
+      setPassword('');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not create user', 'error');
+    } finally {
+      setSaving(false);
     }
-    toast(`User ${name} created`);
-    setName('');
-    setEmail('');
-    setPhone('');
+  }
+
+  async function toggleStatus(user: User) {
+    const next = (user.status ?? 'Active') === 'Active' ? 'Inactive' : 'Active';
+    try {
+      const updated = await usersService.setStatus(user.id, next);
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? updated : u)));
+      toast(`${updated.name} marked ${updated.status}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+    }
   }
 
   if (!isSuperAdmin) return null;
@@ -63,13 +103,13 @@ export default function UsersPage() {
     <div>
       <PageHeader
         title="Users"
-        description="Super Admin can create farm users. Users cannot edit or delete each other’s data."
+        description="Create farm users and share their login credentials. Activate or deactivate access anytime."
       />
 
       <div className="mb-6 grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <h2 className="mb-4 text-base font-semibold">Create user</h2>
-          <form onSubmit={onCreate} className="space-y-3">
+          <form onSubmit={(e) => void onCreate(e)} className="space-y-3">
             <Input
               label="Full Name"
               required
@@ -84,9 +124,17 @@ export default function UsersPage() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              label="Password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              hint="Min 8 characters — share with the user for login"
+            />
             <p className="text-xs text-muted-fg">Role is always User (not choosable).</p>
-            <Button type="submit" className="w-full">
-              Create User
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving ? 'Creating…' : 'Create User'}
             </Button>
           </form>
         </Card>
@@ -101,7 +149,12 @@ export default function UsersPage() {
           <Table
             data={filtered}
             rowKey={(u) => u.id}
-            empty={<EmptyState title="No users" description="Create a user to get started." />}
+            empty={
+              <EmptyState
+                title={loading ? 'Loading…' : 'No users'}
+                description={loading ? 'Fetching from the server.' : 'Create a user to get started.'}
+              />
+            }
             columns={[
               { key: 'name', header: 'Name', render: (u) => u.name },
               { key: 'email', header: 'Email', render: (u) => u.email },
@@ -131,10 +184,7 @@ export default function UsersPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setUserStatus(u.id, active ? 'Inactive' : 'Active');
-                        toast(`${u.name} marked ${active ? 'Inactive' : 'Active'}`);
-                      }}
+                      onClick={() => void toggleStatus(u)}
                     >
                       {active ? 'Deactivate' : 'Activate'}
                     </Button>

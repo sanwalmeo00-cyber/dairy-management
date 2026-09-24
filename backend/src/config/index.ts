@@ -3,7 +3,7 @@ import { env } from './env';
 export const appConfig = {
   env: env.NODE_ENV,
   port: env.PORT,
-  corsOrigin: env.CORS_ORIGIN,
+  corsOrigin: env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
   jwt: {
     secret: env.JWT_SECRET,
     expiresIn: '7d' as const,
@@ -15,5 +15,6 @@ export const appConfig = {
     region: env.AWS_REGION,
     bucket: env.AWS_S3_BUCKET,
     endpoint: env.AWS_S3_ENDPOINT,
+    publicBaseUrl: env.AWS_S3_PUBLIC_BASE_URL,
   },
 };

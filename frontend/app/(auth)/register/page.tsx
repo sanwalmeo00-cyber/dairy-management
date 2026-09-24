@@ -57,7 +57,9 @@ export default function RegisterPage() {
       />
       <Card className="relative z-10 w-full max-w-md">
         <div className="mb-6">
-          <p className="text-sm font-medium text-primary">Green Meadow</p>
+          <p className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-wide text-primary">
+            SMS DAIRY FARM
+          </p>
           <h1 className="mt-1 text-2xl font-semibold">Create account</h1>
           <p className="mt-1 text-sm text-muted-fg">Role is assigned by the farm — not chosen here.</p>
         </div>

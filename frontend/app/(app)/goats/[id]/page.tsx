@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
-import { mockGoats } from '@/data/mock/goats';
 import {
   PageHeader,
   Card,
@@ -18,18 +17,15 @@ import {
 import { formatCurrency, formatDate } from '@/lib/format';
 import type { Goat } from '@/types/farm';
 
-function parentName(id?: string) {
-  if (!id) return '—';
-  return mockGoats.find((g) => g.id === id)?.name ?? id;
-}
-
 export default function GoatDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const [goat, setGoat] = useState<Goat | null>(null);
+  const [goats, setGoats] = useState<Goat[]>([]);
 
   useEffect(() => {
     void goatsService.getById(id).then((g) => setGoat(g ?? null));
+    void goatsService.getAll().then(setGoats);
   }, [id]);
 
   if (!goat) {
@@ -37,10 +33,14 @@ export default function GoatDetailPage() {
   }
 
   const canEdit = canModifyRecord(goat.ownerId);
+  const parentTag = (parentId?: string) => {
+    if (!parentId) return '—';
+    return goats.find((g) => g.id === parentId)?.tagNumber ?? parentId;
+  };
 
   return (
     <div>
-      <PageHeader title={goat.name} description={`Tag ${goat.tagNumber} · ${goat.breed}`}>
+      <PageHeader title={goat.tagNumber} description={goat.breed}>
         {canEdit && (
           <Link href={`/goats/${goat.id}/edit`}>
             <Button>Edit</Button>
@@ -53,9 +53,20 @@ export default function GoatDetailPage() {
 
       {!canEdit && <ViewOnlyBanner ownerName={goat.ownerName} />}
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-start gap-4">
         <OwnerBadge name={goat.ownerName} isOwn={isOwnerOf(goat.ownerId)} />
       </div>
+
+      {goat.imageUrl && (
+        <Card className="mb-4 overflow-hidden p-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={goat.imageUrl}
+            alt={goat.tagNumber}
+            className="max-h-80 w-full object-cover"
+          />
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -79,11 +90,11 @@ export default function GoatDetailPage() {
             </div>
             <div>
               <dt className="text-muted-fg">Father</dt>
-              <dd>{parentName(goat.fatherId)}</dd>
+              <dd>{parentTag(goat.fatherId)}</dd>
             </div>
             <div>
               <dt className="text-muted-fg">Mother</dt>
-              <dd>{parentName(goat.motherId)}</dd>
+              <dd>{parentTag(goat.motherId)}</dd>
             </div>
           </dl>
         </Card>

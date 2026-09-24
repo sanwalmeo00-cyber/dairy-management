@@ -38,13 +38,17 @@ export class AuthService {
 
   async login(input: LoginInput) {
     const user = await prisma.user.findUnique({ where: { email: input.email } });
-    if (!user) {
+    if (!user || user.deletedAt) {
       throw new UnauthorizedError('Invalid email or password');
     }
 
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedError('Invalid email or password');
+    }
+
+    if (user.status !== 'Active') {
+      throw new UnauthorizedError('This account is inactive. Contact Super Admin.');
     }
 
     const token = signToken({
@@ -58,7 +62,10 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
+        phone: user.phone,
         role: user.role,
+        status: user.status,
+        createdBy: user.createdBy,
         createdAt: user.createdAt,
       },
       token,

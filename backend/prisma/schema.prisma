@@ -26,19 +26,29 @@ enum OrderStatus {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   passwordHash String
   name         String
   phone        String?
-  role         Role      @default(USER)
-  status       String    @default("Active")
+  role         Role       @default(USER)
+  status       String     @default("Active")
   createdBy    String?
   deletedAt    DateTime?
   deletedBy    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   orders       Order[]
+  goats        Goat[]
+  breedings    Breeding[]
+  kids         Kid[]
+  goatPurchases GoatPurchase[]
+  sales        Sale[]
+  expenses     Expense[]
+  workers      Worker[]
+  workerPayments WorkerPayment[]
+  inventoryItems InventoryItem[]
+  inventoryTransactions InventoryTransaction[]
 }
 
 model Product {
@@ -79,4 +89,265 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   quantity  Int
   unitPrice Decimal @db.Decimal(10, 2)
+}
+
+model Goat {
+  id                String     @id @default(cuid())
+  tagNumber         String     @unique
+  name              String?
+  breed             String
+  gender            String
+  dateOfBirth       DateTime   @db.Date
+  purchaseDate      DateTime?  @db.Date
+  purchasePrice     Decimal?   @db.Decimal(12, 2)
+  currentValue      Decimal    @db.Decimal(12, 2)
+  weight            Decimal    @db.Decimal(8, 2)
+  color             String
+  healthStatus      String
+  vaccinationStatus String
+  status            String     @default("Active")
+  imageUrl          String?
+  notes             String?
+  fatherId          String?
+  motherId          String?
+  father            Goat?      @relation("GoatFather", fields: [fatherId], references: [id], onDelete: SetNull)
+  mother            Goat?      @relation("GoatMother", fields: [motherId], references: [id], onDelete: SetNull)
+  childrenAsFather  Goat[]     @relation("GoatFather")
+  childrenAsMother  Goat[]     @relation("GoatMother")
+  breedingsAsFemale Breeding[] @relation("BreedingFemale")
+  breedingsAsMale   Breeding[] @relation("BreedingMale")
+  kidsAsMother      Kid[]      @relation("KidMother")
+  kidsAsFather      Kid[]      @relation("KidFather")
+  purchases         GoatPurchase[]
+  ownerId           String
+  owner             User       @relation(fields: [ownerId], references: [id])
+  deletedAt         DateTime?
+  deletedBy         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model Breeding {
+  id              String    @id @default(cuid())
+  femaleGoatId    String
+  maleGoatId      String?
+  femaleGoat      Goat      @relation("BreedingFemale", fields: [femaleGoatId], references: [id])
+  maleGoat        Goat?     @relation("BreedingMale", fields: [maleGoatId], references: [id], onDelete: SetNull)
+  breedingDate    DateTime  @db.Date
+  expectedDueDate DateTime  @db.Date
+  actualBirthDate DateTime? @db.Date
+  status          String
+  notes           String?
+  kids            Kid[]
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id])
+  deletedAt       DateTime?
+  deletedBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([femaleGoatId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model Kid {
+  id                String    @id @default(cuid())
+  tagNumber         String    @unique
+  name              String?
+  gender            String
+  dateOfBirth       DateTime  @db.Date
+  motherId          String
+  fatherId          String?
+  mother            Goat      @relation("KidMother", fields: [motherId], references: [id])
+  father            Goat?     @relation("KidFather", fields: [fatherId], references: [id], onDelete: SetNull)
+  weight            Decimal   @db.Decimal(8, 2)
+  healthStatus      String
+  vaccinationStatus String
+  status            String    @default("Active")
+  imageUrl          String?
+  notes             String?
+  breedingId        String?
+  breeding          Breeding? @relation(fields: [breedingId], references: [id], onDelete: SetNull)
+  ownerId           String
+  owner             User      @relation(fields: [ownerId], references: [id])
+  deletedAt         DateTime?
+  deletedBy         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([motherId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model GoatPurchase {
+  id            String    @id @default(cuid())
+  date          DateTime  @db.Date
+  goatId        String?
+  tagNumber     String
+  seller        String
+  purchasePrice Decimal   @db.Decimal(12, 2)
+  paymentStatus String
+  notes         String?
+  goat          Goat?     @relation(fields: [goatId], references: [id], onDelete: SetNull)
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([tagNumber])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model Sale {
+  id            String    @id @default(cuid())
+  date          DateTime  @db.Date
+  tagNumber     String
+  buyer         String
+  salePrice     Decimal   @db.Decimal(12, 2)
+  paymentStatus String
+  paymentMethod String
+  notes         String?
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([tagNumber])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model Expense {
+  id            String    @id @default(cuid())
+  date          DateTime  @db.Date
+  description   String
+  category      String
+  amount        Decimal   @db.Decimal(12, 2)
+  paymentMethod String
+  notes         String?
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([ownerId])
+  @@index([category])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model Worker {
+  id          String          @id @default(cuid())
+  name        String
+  phone       String
+  role        String
+  salary      Decimal         @db.Decimal(12, 2)
+  joiningDate DateTime        @db.Date
+  status      String          @default("Active")
+  notes       String?
+  payments    WorkerPayment[]
+  ownerId     String
+  owner       User            @relation(fields: [ownerId], references: [id])
+  deletedAt   DateTime?
+  deletedBy   String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model WorkerPayment {
+  id            String    @id @default(cuid())
+  workerId      String
+  worker        Worker    @relation(fields: [workerId], references: [id])
+  date          DateTime  @db.Date
+  /// Month this payment counts toward, e.g. "2026-09"
+  forMonth      String
+  type          String
+  amount        Decimal   @db.Decimal(12, 2)
+  paymentMethod String
+  notes         String?
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([workerId])
+  @@index([forMonth])
+  @@index([ownerId])
+  @@index([deletedAt])
+}
+
+model InventoryItem {
+  id            String                 @id @default(cuid())
+  name          String
+  category      String
+  unit          String
+  currentStock  Decimal                @db.Decimal(12, 2)
+  minimumStock  Decimal                @db.Decimal(12, 2)
+  cost          Decimal                @db.Decimal(12, 2)
+  dailyUsage    Decimal?               @db.Decimal(12, 2)
+  expiryDate    DateTime?              @db.Date
+  supplier      String?
+  notes         String?
+  transactions  InventoryTransaction[]
+  ownerId       String
+  owner         User                   @relation(fields: [ownerId], references: [id])
+  deletedAt     DateTime?
+  deletedBy     String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([ownerId])
+  @@index([category])
+  @@index([deletedAt])
+  @@index([deletedAt, ownerId])
+}
+
+model InventoryTransaction {
+  id        String        @id @default(cuid())
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  date      DateTime      @db.Date
+  quantity  Decimal       @db.Decimal(12, 2)
+  direction String
+  reason    String?
+  supplier  String?
+  cost      Decimal?      @db.Decimal(12, 2)
+  notes     String?
+  ownerId   String
+  owner     User          @relation(fields: [ownerId], references: [id])
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([itemId])
+  @@index([ownerId])
+  @@index([deletedAt])
 }

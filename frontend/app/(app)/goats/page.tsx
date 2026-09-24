@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
-import { useSoftDelete } from '@/context/SoftDeleteContext';
 import { useToast } from '@/context/ToastContext';
 import type { Goat } from '@/types/farm';
 import {
@@ -22,36 +21,43 @@ import {
 import { formatCurrency, formatDate } from '@/lib/format';
 
 export default function GoatsPage() {
-  const { canModifyRecord, isOwnerOf, currentUser } = useAuth();
-  const { softDelete, filterActive } = useSoftDelete();
+  const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Goat[]>([]);
   const [search, setSearch] = useState('');
   const [gender, setGender] = useState('');
   const [status, setStatus] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setRows(await goatsService.getAll());
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to load goats', 'error');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    void goatsService.getAll().then(setRows);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const activeRows = useMemo(() => filterActive(rows, 'goat'), [rows, filterActive]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return activeRows.filter((g) => {
+    return rows.filter((g) => {
       if (gender && g.gender !== gender) return false;
       if (status && g.status !== status) return false;
       if (!q) return true;
-      return (
-        g.name.toLowerCase().includes(q) ||
-        g.tagNumber.toLowerCase().includes(q) ||
-        g.breed.toLowerCase().includes(q)
-      );
+      return g.tagNumber.toLowerCase().includes(q) || g.breed.toLowerCase().includes(q);
     });
-  }, [activeRows, search, gender, status]);
+  }, [rows, search, gender, status]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteId) return;
     const goat = rows.find((g) => g.id === deleteId);
     if (!goat || !canModifyRecord(goat.ownerId)) {
@@ -59,15 +65,13 @@ export default function GoatsPage() {
       setDeleteId(null);
       return;
     }
-    softDelete({
-      entity: 'goat',
-      recordId: goat.id,
-      label: `${goat.name} (${goat.tagNumber})`,
-      ownerId: goat.ownerId,
-      ownerName: goat.ownerName,
-      deletedBy: currentUser,
-    });
-    toast('Marked as deleted — find it in Deleted tab');
+    try {
+      await goatsService.remove(goat.id);
+      setRows((prev) => prev.filter((g) => g.id !== goat.id));
+      toast('Goat deleted');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    }
     setDeleteId(null);
   };
 
@@ -85,7 +89,7 @@ export default function GoatsPage() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder="Search name, tag, breed…"
+          placeholder="Search tag, breed…"
           className="sm:max-w-xs"
         />
         <Select
@@ -116,13 +120,23 @@ export default function GoatsPage() {
         rowKey={(g) => g.id}
         empty={
           <EmptyState
-            title="No goats found"
-            description="Try adjusting filters or add a new goat."
+            title={loading ? 'Loading…' : 'No goats found'}
+            description={loading ? 'Fetching herd from the server.' : 'Try adjusting filters or add a new goat.'}
           />
         }
         columns={[
+          {
+            key: 'photo',
+            header: '',
+            render: (g) =>
+              g.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={g.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
+              ) : (
+                <span className="inline-block h-9 w-9 rounded-md bg-muted" />
+              ),
+          },
           { key: 'tag', header: 'Tag', render: (g) => g.tagNumber },
-          { key: 'name', header: 'Name', render: (g) => g.name },
           { key: 'breed', header: 'Breed', render: (g) => g.breed },
           { key: 'gender', header: 'Gender', render: (g) => g.gender },
           {
@@ -169,14 +183,14 @@ export default function GoatsPage() {
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         title="Delete goat?"
         description={
           pending
-            ? `“${pending.name}” will be marked as deleted (not removed from the database). You can find it later in the Deleted tab.`
+            ? `Tag “${pending.tagNumber}” will be marked as deleted.`
             : 'This record will be marked as deleted.'
         }
-        confirmLabel="Mark deleted"
+        confirmLabel="Delete"
       />
     </div>
   );
