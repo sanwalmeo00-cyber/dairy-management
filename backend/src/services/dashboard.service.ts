@@ -1,6 +1,11 @@
 import prisma from '../database/prisma';
 import { cacheGet, cacheSet } from '../utils/cache';
 
+function isOnFarmStatus(status: string) {
+  const s = status === 'Active' ? 'Healthy' : status;
+  return s !== 'Sold' && s !== 'Deceased';
+}
+
 const CACHE_KEY = 'dashboard:overview';
 const CACHE_TTL_MS = 60_000;
 
@@ -129,10 +134,10 @@ async function buildDashboard() {
     }),
   ]);
 
-  const activeGoats = goats.filter((g) => g.status === 'Active');
+  const activeGoats = goats.filter((g) => isOnFarmStatus(g.status));
   const totalSales = sales.reduce((s, r) => s + Number(r.salePrice), 0);
   const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount), 0);
-  const farmValue = activeGoats.reduce((s, g) => s + Number(g.currentValue), 0);
+  const profitOrLoss = totalSales - totalExpenses;
   const lowStockItems = inventoryItems.filter(
     (i) => Number(i.currentStock) <= 0 || Number(i.currentStock) < Number(i.minimumStock)
   ).length;
@@ -232,7 +237,7 @@ async function buildDashboard() {
       kids: kids.length,
       totalSales,
       totalExpenses,
-      farmValue,
+      profitOrLoss,
       lowStockItems,
     },
     charts: {

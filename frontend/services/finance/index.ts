@@ -9,6 +9,7 @@ export type GoatPurchaseInput = {
   purchasePrice: number;
   paymentStatus: string;
   notes?: string | null;
+  ownerId?: string | null;
 };
 
 export type SaleInput = {
@@ -19,6 +20,7 @@ export type SaleInput = {
   paymentStatus: string;
   paymentMethod: string;
   notes?: string | null;
+  ownerId?: string | null;
 };
 
 export type ExpenseInput = {
@@ -28,7 +30,10 @@ export type ExpenseInput = {
   amount: number;
   paymentMethod: string;
   notes?: string | null;
+  ownerId?: string | null;
 };
+
+export type FinanceUserOption = { id: string; name: string };
 
 export const goatPurchasesService = {
   async getAll(): Promise<GoatPurchase[]> {
@@ -63,6 +68,12 @@ export const expensesService = {
   },
   async remove(id: string): Promise<Expense> {
     return api.delete<Expense>(`/expenses/${id}`);
+  },
+};
+
+export const financeUsersService = {
+  async getOptions(): Promise<FinanceUserOption[]> {
+    return api.get<FinanceUserOption[]>('/users/finance-options');
   },
 };
 

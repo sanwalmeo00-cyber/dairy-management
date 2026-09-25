@@ -6,7 +6,7 @@ export const mockDashboardStats = {
   kids: 24,
   totalSales: 850000,
   totalExpenses: 320000,
-  farmValue: 4200000,
+  profitOrLoss: 530000,
 };
 
 export const mockSalesVsExpenses = [

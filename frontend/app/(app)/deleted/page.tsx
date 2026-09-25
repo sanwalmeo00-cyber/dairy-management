@@ -32,7 +32,7 @@ const entityLabels: Record<RestorableEntity, string> = {
 
 const restoreRoutes: Partial<Record<RestorableEntity, string>> = {
   goat: '/goats',
-  breeding: '/breeding',
+  breeding: '/kids',
   kid: '/kids',
   'goat-purchase': '/goat-purchases',
   sale: '/sales',

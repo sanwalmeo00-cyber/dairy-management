@@ -51,7 +51,10 @@ export default function GoatsPage() {
     const q = search.toLowerCase();
     return rows.filter((g) => {
       if (gender && g.gender !== gender) return false;
-      if (status && g.status !== status) return false;
+      if (status) {
+        const gStatus = g.status === 'Active' ? 'Healthy' : g.status;
+        if (gStatus !== status) return false;
+      }
       if (!q) return true;
       return g.tagNumber.toLowerCase().includes(q) || g.breed.toLowerCase().includes(q);
     });
@@ -104,14 +107,18 @@ export default function GoatsPage() {
         />
         <Select
           options={[
-            { label: 'Active', value: 'Active' },
+            { label: 'Healthy', value: 'Healthy' },
+            { label: 'Ill', value: 'Ill' },
+            { label: 'Under Treatment', value: 'Under Treatment' },
+            { label: 'Recovering', value: 'Recovering' },
+            { label: 'Pregnant', value: 'Pregnant' },
             { label: 'Sold', value: 'Sold' },
             { label: 'Deceased', value: 'Deceased' },
           ]}
           placeholder="All statuses"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="sm:w-40"
+          className="sm:w-44"
         />
       </div>
 
@@ -142,7 +149,10 @@ export default function GoatsPage() {
           {
             key: 'status',
             header: 'Status',
-            render: (g) => <Badge tone={statusTone(g.status)}>{g.status}</Badge>,
+            render: (g) => {
+              const label = g.status === 'Active' ? 'Healthy' : g.status;
+              return <Badge tone={statusTone(label)}>{label}</Badge>;
+            },
           },
           { key: 'dob', header: 'DOB', render: (g) => formatDate(g.dateOfBirth) },
           { key: 'value', header: 'Value', render: (g) => formatCurrency(g.currentValue) },

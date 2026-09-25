@@ -37,6 +37,19 @@ export class UsersService {
     });
   }
 
+  /** Active farm partners for attributing cashbook money in/out. */
+  async findFinanceOptions() {
+    return prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        status: 'Active',
+        role: { not: Role.SUPER_ADMIN },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findById(id: string) {
     const user = await prisma.user.findFirst({
       where: { id, deletedAt: null },

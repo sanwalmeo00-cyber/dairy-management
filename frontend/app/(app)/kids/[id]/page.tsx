@@ -31,7 +31,12 @@ export default function KidDetailPage() {
 
   return (
     <div>
-      <PageHeader title={kid.tagNumber} description="Kid record">
+      <PageHeader title={kid.tagNumber} description="Kid birth record">
+        {kid.goatId && (
+          <Link href={`/goats/${kid.goatId}`}>
+            <Button>Open in Animals</Button>
+          </Link>
+        )}
         <Link href="/kids">
           <Button variant="outline">Back</Button>
         </Link>

@@ -7,7 +7,7 @@ import {
   Baby,
   TrendingUp,
   Wallet,
-  Landmark,
+  Scale,
   Plus,
 } from 'lucide-react';
 import {
@@ -73,11 +73,14 @@ export default function DashboardPage() {
 
   const quickActions = [
     { label: 'Add Animal', href: '/goats/new' },
-    { label: 'Record Sale', href: '/sales/new' },
-    { label: 'Add Expense', href: '/expenses/new' },
-    { label: 'Plan Breeding', href: '/breeding/new' },
+    { label: 'Record Birth', href: '/kids/new' },
+    { label: 'Record Sale', href: '/cashbook/new?type=sale' },
+    { label: 'Add Expense', href: '/cashbook/new?type=expense' },
     { label: 'Stock In', href: '/inventory/stock-in' },
   ];
+
+  const profitOrLoss = stats.profitOrLoss ?? stats.totalSales - stats.totalExpenses;
+  const isProfit = profitOrLoss >= 0;
 
   return (
     <div>
@@ -106,9 +109,10 @@ export default function DashboardPage() {
           icon={<Wallet className="h-5 w-5" />}
         />
         <StatCard
-          label="Farm Value"
-          value={formatCurrency(stats.farmValue)}
-          icon={<Landmark className="h-5 w-5" />}
+          label={isProfit ? 'Profit' : 'Loss'}
+          value={formatCurrency(Math.abs(profitOrLoss))}
+          hint={isProfit ? 'Sales minus expenses' : 'Expenses exceed sales'}
+          icon={<Scale className="h-5 w-5" />}
         />
       </div>
 

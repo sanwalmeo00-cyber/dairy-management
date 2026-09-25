@@ -11,6 +11,20 @@ export const appConfig = {
     expiresIn: '7d' as const,
   },
   apiPrefix: '/api/v1',
+  cloudinary: {
+    get cloudName() {
+      return env.CLOUDINARY_CLOUD_NAME;
+    },
+    get apiKey() {
+      return env.CLOUDINARY_API_KEY;
+    },
+    get apiSecret() {
+      return env.CLOUDINARY_API_SECRET;
+    },
+    get url() {
+      return env.CLOUDINARY_URL;
+    },
+  },
   s3: {
     get accessKeyId() {
       return env.AWS_ACCESS_KEY_ID;

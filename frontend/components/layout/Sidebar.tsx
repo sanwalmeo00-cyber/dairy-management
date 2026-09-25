@@ -4,11 +4,8 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Rabbit,
-  HeartHandshake,
   Baby,
-  ShoppingBag,
-  TrendingUp,
-  Wallet,
+  BookOpen,
   Users,
   Package,
   Settings,
@@ -35,17 +32,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/goats', label: 'Animals', icon: Rabbit },
-        { href: '/breeding', label: 'Breeding', icon: HeartHandshake },
         { href: '/kids', label: 'Kids', icon: Baby },
       ],
     },
     {
       label: 'Finance',
-      items: [
-        { href: '/goat-purchases', label: 'Animal Purchases', icon: ShoppingBag },
-        { href: '/sales', label: 'Sales', icon: TrendingUp },
-        { href: '/expenses', label: 'Expenses', icon: Wallet },
-      ],
+      items: [{ href: '/cashbook', label: 'Cashbook', icon: BookOpen }],
     },
     {
       label: 'Management',

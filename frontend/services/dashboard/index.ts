@@ -7,7 +7,7 @@ export type DashboardStats = {
   kids: number;
   totalSales: number;
   totalExpenses: number;
-  farmValue: number;
+  profitOrLoss: number;
   lowStockItems: number;
 };
 

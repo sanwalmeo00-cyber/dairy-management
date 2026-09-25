@@ -1,13 +1,17 @@
 import { z } from 'zod';
+import { GOAT_STATUSES } from '@/lib/goatStatus';
 
 export const goatIdParamSchema = z.object({
   id: z.string().min(1),
 });
 
 const goatGender = z.enum(['Male', 'Female']);
-const goatStatus = z.enum(['Active', 'Sold', 'Deceased']);
+/** Includes legacy Active for older records / clients. */
+const goatStatus = z.enum([...GOAT_STATUSES, 'Active']);
 const healthStatus = z.enum(['Healthy', 'Sick', 'Under Treatment', 'Recovering']);
 const vaccinationStatus = z.enum(['Up to Date', 'Due', 'Overdue', 'Not Vaccinated']);
+const paymentStatus = z.enum(['Paid', 'Unpaid', 'Partial']);
+const paymentMethod = z.enum(['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other']);
 
 const dateString = z
   .string()
@@ -25,16 +29,23 @@ export const createGoatSchema = z.object({
   currentValue: z.coerce.number().nonnegative(),
   weight: z.coerce.number().positive(),
   color: z.string().min(1).max(100),
-  healthStatus,
+  healthStatus: healthStatus.optional(),
   vaccinationStatus,
-  status: goatStatus.default('Active'),
+  status: goatStatus.default('Healthy'),
   imageUrl: z.string().url().optional().nullable().or(z.literal('')),
   notes: z.string().max(2000).optional().nullable(),
   fatherId: z.string().min(1).optional().nullable(),
   motherId: z.string().min(1).optional().nullable(),
 });
 
-export const updateGoatSchema = createGoatSchema.partial();
+export const updateGoatSchema = createGoatSchema.partial().extend({
+  /** Required when changing status to Sold */
+  salePrice: z.coerce.number().positive().optional(),
+  saleBuyer: z.string().min(1).max(200).optional(),
+  salePaymentMethod: paymentMethod.optional(),
+  salePaymentStatus: paymentStatus.optional(),
+  saleDate: dateString.optional(),
+});
 
 export type CreateGoatInput = z.infer<typeof createGoatSchema>;
 export type UpdateGoatInput = z.infer<typeof updateGoatSchema>;

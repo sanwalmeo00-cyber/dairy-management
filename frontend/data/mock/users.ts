@@ -9,25 +9,5 @@ export const superAdmin: User = {
   status: 'Active',
 };
 
-export const partnerA: User = {
-  id: 'user-1',
-  name: 'Partner A',
-  email: 'partnera@example.com',
-  phone: '0300-1112233',
-  role: 'USER',
-  createdBy: 'admin-1',
-  status: 'Active',
-};
-
-export const partnerB: User = {
-  id: 'user-2',
-  name: 'Partner B',
-  email: 'partnerb@example.com',
-  phone: '0300-4455667',
-  role: 'USER',
-  createdBy: 'admin-1',
-  status: 'Active',
-};
-
-/** Seed users — runtime list is managed in AuthContext. */
-export const mockUsers: User[] = [superAdmin, partnerA, partnerB];
+/** Local fallback list — only Super Admin is seeded; farm users are created in-app. */
+export const mockUsers: User[] = [superAdmin];
