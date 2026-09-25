@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
 import { Button, Input, Card, FormError } from '@/components/ui';
@@ -13,8 +12,8 @@ function LoginForm() {
   const { toast } = useToast();
   const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState('partnera@example.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
 
@@ -34,11 +33,8 @@ function LoginForm() {
       const message = result.message ?? 'Login failed.';
       if (message.toLowerCase().includes('inactive')) {
         setFieldErrors({ email: 'This account is inactive. Contact Super Admin.' });
-      } else if (message.toLowerCase().includes('super admin')) {
-        setFormError(message);
-        setFieldErrors({});
       } else if (message.toLowerCase().includes('invalid')) {
-        setFieldErrors({ password: 'Wrong email or password. Contact Super Admin if you forgot it.' });
+        setFieldErrors({ password: 'Wrong email or password.' });
       } else {
         setFieldErrors({ password: message });
       }
@@ -56,9 +52,9 @@ function LoginForm() {
         <p className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-wide text-primary">
           SMS DAIRY FARM
         </p>
-        <h1 className="mt-1 text-2xl font-semibold">User sign in</h1>
+        <h1 className="mt-1 text-2xl font-semibold">Sign in</h1>
         <p className="mt-1 text-sm text-muted-fg">
-          Sign in with credentials from Super Admin
+          Enter the email and password provided by Super Admin
         </p>
       </div>
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
@@ -96,12 +92,6 @@ function LoginForm() {
           Login
         </Button>
       </form>
-      <p className="mt-6 border-t border-border pt-4 text-center text-xs text-muted-fg">
-        Super Admin?{' '}
-        <Link href="/superuser/login" className="font-medium text-primary hover:underline">
-          Sign in here
-        </Link>
-      </p>
     </Card>
   );
 }

@@ -1,13 +1,19 @@
 import { PrismaClient, Role } from '@prisma/client';
+import { PrismaLibSql } from '@prisma/adapter-libsql';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const adapter = new PrismaLibSql({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+const prisma = new PrismaClient({ adapter });
 
 const DEFAULT_PASSWORD = 'password';
 
 async function main() {
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 12);
 
+  // Only Super Admin is seeded. Farm users are created by Super Admin in the app.
   const superAdmin = await prisma.user.upsert({
     where: { email: 'superadmin@example.com' },
     update: {
@@ -29,61 +35,23 @@ async function main() {
     },
   });
 
-  const partnerA = await prisma.user.upsert({
-    where: { email: 'partnera@example.com' },
-    update: {
-      name: 'Partner A',
-      phone: '0300-1112233',
-      role: Role.USER,
-      status: 'Active',
-      createdBy: superAdmin.id,
-      passwordHash,
+  // Remove demo partner accounts if they still exist
+  await prisma.user.updateMany({
+    where: {
+      email: { in: ['partnera@example.com', 'partnerb@example.com'] },
       deletedAt: null,
     },
-    create: {
-      id: 'user-1',
-      email: 'partnera@example.com',
-      name: 'Partner A',
-      phone: '0300-1112233',
-      role: Role.USER,
-      status: 'Active',
-      createdBy: superAdmin.id,
-      passwordHash,
-    },
+    data: { deletedAt: new Date(), deletedBy: superAdmin.id, status: 'Inactive' },
   });
 
-  const partnerB = await prisma.user.upsert({
-    where: { email: 'partnerb@example.com' },
-    update: {
-      name: 'Partner B',
-      phone: '0300-4455667',
-      role: Role.USER,
-      status: 'Active',
-      createdBy: superAdmin.id,
-      passwordHash,
-      deletedAt: null,
-    },
-    create: {
-      id: 'user-2',
-      email: 'partnerb@example.com',
-      name: 'Partner B',
-      phone: '0300-4455667',
-      role: Role.USER,
-      status: 'Active',
-      createdBy: superAdmin.id,
-      passwordHash,
-    },
-  });
-
-  console.log('Seeded users into Neon:');
+  console.log('Seeded Super Admin only into Turso:');
   console.log(`  SUPER_ADMIN  ${superAdmin.email}  / ${DEFAULT_PASSWORD}`);
-  console.log(`  USER         ${partnerA.email}     / ${DEFAULT_PASSWORD}`);
-  console.log(`  USER         ${partnerB.email}     / ${DEFAULT_PASSWORD}`);
+  console.log('Farm users: create via Users page (Super Admin).');
 }
 
 main()
-  .catch((error) => {
-    console.error('Seed failed:', error);
+  .catch((e) => {
+    console.error(e);
     process.exit(1);
   })
   .finally(async () => {

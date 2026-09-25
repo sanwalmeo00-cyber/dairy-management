@@ -2,8 +2,15 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /** Local sqlite file for Prisma CLI only (migrate/generate). Runtime uses Turso. */
+  DATABASE_URL: z.string().optional(),
+  TURSO_DATABASE_URL: z.string().min(1, 'TURSO_DATABASE_URL is required'),
+  TURSO_AUTH_TOKEN: z.string().min(1, 'TURSO_AUTH_TOKEN is required'),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters'),
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_URL: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
   AWS_REGION: z.string().default('us-east-1'),

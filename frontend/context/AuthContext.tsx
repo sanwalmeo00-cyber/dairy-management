@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { partnerA, partnerB, superAdmin, mockUsers as seedUsers } from '@/data/mock/users';
+import { superAdmin, mockUsers as seedUsers } from '@/data/mock/users';
 import type { Role, User } from '@/types/farm';
 import { canModify, isOwner, isSuperAdmin } from '@/lib/ownership';
 import { api, setToken } from '@/lib/api';
@@ -66,12 +66,12 @@ function mapApiUser(raw: {
 }
 
 function findSeedUser(id: string | null): User {
-  if (!id) return partnerA;
-  return seedUsers.find((u) => u.id === id) ?? partnerA;
+  if (!id) return superAdmin;
+  return seedUsers.find((u) => u.id === id) ?? superAdmin;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User>(partnerA);
+  const [currentUser, setCurrentUser] = useState<User>(superAdmin);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [users, setUsers] = useState<User[]>(seedUsers);
 
@@ -126,13 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (portal === 'superuser' && user.role !== 'SUPER_ADMIN') {
         return {
           ok: false,
-          message: 'This is a farm user account. Please use the user login page.',
-        };
-      }
-      if (portal === 'user' && user.role === 'SUPER_ADMIN') {
-        return {
-          ok: false,
-          message: 'Super Admin must sign in at /superuser/login.',
+          message: 'This is a farm user account. Please use the login page.',
         };
       }
       if (user.status === 'Inactive') {
@@ -145,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(STORAGE_KEY, user.id);
       localStorage.setItem(USER_JSON_KEY, JSON.stringify(user));
       localStorage.setItem(AUTH_KEY, '1');
-      localStorage.setItem(PORTAL_KEY, portal);
+      localStorage.setItem(PORTAL_KEY, user.role === 'SUPER_ADMIN' ? 'superuser' : portal);
 
       setUsers((prev) => {
         if (prev.some((u) => u.id === user.id)) {
@@ -284,4 +278,4 @@ export function useAuth() {
   return ctx;
 }
 
-export { partnerA, partnerB, superAdmin };
+export { superAdmin };
