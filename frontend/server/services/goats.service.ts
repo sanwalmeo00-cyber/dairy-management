@@ -1,12 +1,18 @@
 import { Prisma } from '@prisma/client';
 import { Role } from '@prisma/client';
 import prisma from '../database/prisma';
-import { ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors';
 import { CreateGoatInput, UpdateGoatInput } from '../validators/goats.validator';
+import {
+  healthFromGoatStatus,
+  normalizeGoatStatus,
+} from '@/lib/goatStatus';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
 } as const;
+
+const SALE_STATUS_NOTE = 'Linked to animal status → Sold';
 
 function toDate(value: string | null | undefined): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -31,7 +37,7 @@ function serializeGoat(
     color: goat.color,
     healthStatus: goat.healthStatus,
     vaccinationStatus: goat.vaccinationStatus,
-    status: goat.status,
+    status: normalizeGoatStatus(goat.status),
     imageUrl: goat.imageUrl ?? undefined,
     notes: goat.notes ?? undefined,
     fatherId: goat.fatherId ?? undefined,
@@ -50,6 +56,10 @@ function assertCanModify(ownerId: string, userId: string, role: Role) {
   if (ownerId !== userId) {
     throw new ForbiddenError('You cannot modify another user’s record');
   }
+}
+
+function resolveStatus(status: string | undefined, fallback: string) {
+  return normalizeGoatStatus(status ?? fallback);
 }
 
 export class GoatsService {
@@ -75,6 +85,10 @@ export class GoatsService {
     const existing = await prisma.goat.findUnique({ where: { tagNumber: input.tagNumber } });
     if (existing) throw new ConflictError('Tag number already exists');
 
+    const status = resolveStatus(input.status, 'Healthy');
+    const healthStatus =
+      input.healthStatus ?? healthFromGoatStatus(status);
+
     const goat = await prisma.goat.create({
       data: {
         tagNumber: input.tagNumber,
@@ -87,9 +101,9 @@ export class GoatsService {
         currentValue: input.currentValue,
         weight: input.weight,
         color: input.color,
-        healthStatus: input.healthStatus,
+        healthStatus,
         vaccinationStatus: input.vaccinationStatus,
-        status: input.status,
+        status,
         imageUrl: input.imageUrl ?? undefined,
         notes: input.notes ?? undefined,
         fatherId: input.fatherId ?? undefined,
@@ -112,28 +126,80 @@ export class GoatsService {
       if (clash) throw new ConflictError('Tag number already exists');
     }
 
-    const goat = await prisma.goat.update({
-      where: { id },
-      data: {
-        ...(input.tagNumber !== undefined && { tagNumber: input.tagNumber }),
-        ...(input.name !== undefined && { name: input.name }),
-        ...(input.breed !== undefined && { breed: input.breed }),
-        ...(input.gender !== undefined && { gender: input.gender }),
-        ...(input.dateOfBirth !== undefined && { dateOfBirth: new Date(input.dateOfBirth) }),
-        ...(input.purchaseDate !== undefined && { purchaseDate: toDate(input.purchaseDate) }),
-        ...(input.purchasePrice !== undefined && { purchasePrice: input.purchasePrice }),
-        ...(input.currentValue !== undefined && { currentValue: input.currentValue }),
-        ...(input.weight !== undefined && { weight: input.weight }),
-        ...(input.color !== undefined && { color: input.color }),
-        ...(input.healthStatus !== undefined && { healthStatus: input.healthStatus }),
-        ...(input.vaccinationStatus !== undefined && { vaccinationStatus: input.vaccinationStatus }),
-        ...(input.status !== undefined && { status: input.status }),
-        ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
-        ...(input.notes !== undefined && { notes: input.notes }),
-        ...(input.fatherId !== undefined && { fatherId: input.fatherId }),
-        ...(input.motherId !== undefined && { motherId: input.motherId }),
-      },
-      include: ownerInclude,
+    const prevStatus = normalizeGoatStatus(existing.status);
+    const nextStatus =
+      input.status !== undefined ? resolveStatus(input.status, existing.status) : prevStatus;
+    const becomingSold = nextStatus === 'Sold' && prevStatus !== 'Sold';
+    const leavingSold = prevStatus === 'Sold' && nextStatus !== 'Sold';
+
+    if (becomingSold) {
+      if (input.salePrice == null || !(Number(input.salePrice) > 0)) {
+        throw new ValidationError('Sale amount is required when marking an animal as Sold');
+      }
+    }
+
+    const healthStatus =
+      input.healthStatus ??
+      (input.status !== undefined
+        ? healthFromGoatStatus(nextStatus, existing.healthStatus)
+        : undefined);
+
+    const goat = await prisma.$transaction(async (tx) => {
+      if (becomingSold) {
+        await tx.sale.create({
+          data: {
+            date: new Date(input.saleDate ?? new Date().toISOString().slice(0, 10)),
+            tagNumber: input.tagNumber?.trim() || existing.tagNumber,
+            goatId: existing.id,
+            buyer: (input.saleBuyer ?? 'Walk-in buyer').trim(),
+            salePrice: input.salePrice!,
+            paymentStatus: input.salePaymentStatus ?? 'Paid',
+            paymentMethod: input.salePaymentMethod ?? 'Cash',
+            notes: SALE_STATUS_NOTE,
+            ownerId: existing.ownerId,
+          },
+        });
+      }
+
+      if (leavingSold) {
+        await tx.sale.updateMany({
+          where: {
+            goatId: existing.id,
+            deletedAt: null,
+            notes: SALE_STATUS_NOTE,
+          },
+          data: { deletedAt: new Date(), deletedBy: userId },
+        });
+      }
+
+      return tx.goat.update({
+        where: { id },
+        data: {
+          ...(input.tagNumber !== undefined && { tagNumber: input.tagNumber }),
+          ...(input.name !== undefined && { name: input.name }),
+          ...(input.breed !== undefined && { breed: input.breed }),
+          ...(input.gender !== undefined && { gender: input.gender }),
+          ...(input.dateOfBirth !== undefined && { dateOfBirth: new Date(input.dateOfBirth) }),
+          ...(input.purchaseDate !== undefined && { purchaseDate: toDate(input.purchaseDate) }),
+          ...(input.purchasePrice !== undefined && { purchasePrice: input.purchasePrice }),
+          ...(input.currentValue !== undefined && {
+            currentValue: becomingSold ? input.salePrice! : input.currentValue,
+          }),
+          ...(becomingSold && input.currentValue === undefined && { currentValue: input.salePrice! }),
+          ...(input.weight !== undefined && { weight: input.weight }),
+          ...(input.color !== undefined && { color: input.color }),
+          ...(healthStatus !== undefined && { healthStatus }),
+          ...(input.vaccinationStatus !== undefined && {
+            vaccinationStatus: input.vaccinationStatus,
+          }),
+          ...(input.status !== undefined && { status: nextStatus }),
+          ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
+          ...(input.notes !== undefined && { notes: input.notes }),
+          ...(input.fatherId !== undefined && { fatherId: input.fatherId }),
+          ...(input.motherId !== undefined && { motherId: input.motherId }),
+        },
+        include: ownerInclude,
+      });
     });
 
     return serializeGoat(goat);

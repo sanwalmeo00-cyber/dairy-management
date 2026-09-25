@@ -15,8 +15,25 @@ import {
   Button,
   ViewOnlyBanner,
   ImageUpload,
+  Modal,
 } from '@/components/ui';
-import type { Goat, HealthStatus, VaccinationStatus, GoatStatus } from '@/types/farm';
+import type { Goat, VaccinationStatus } from '@/types/farm';
+import { GOAT_STATUS_OPTIONS, normalizeGoatStatus } from '@/lib/goatStatus';
+import type { PaymentMethod } from '@/types/farm';
+
+type PendingPayload = {
+  tagNumber: string;
+  breed: string;
+  gender: 'Male' | 'Female';
+  dateOfBirth: string;
+  weight: number;
+  color: string;
+  currentValue: number;
+  vaccinationStatus: string;
+  status: string;
+  imageUrl: string | null;
+  notes: string | null;
+};
 
 export default function EditGoatPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,11 +42,21 @@ export default function EditGoatPage() {
   const { toast } = useToast();
   const [goat, setGoat] = useState<Goat | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState('');
+  const [saleOpen, setSaleOpen] = useState(false);
+  const [pending, setPending] = useState<PendingPayload | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     void goatsService.getById(id).then((g) => {
-      setGoat(g ?? null);
-      setImageUrl(g?.imageUrl ?? null);
+      if (!g) {
+        setGoat(null);
+        return;
+      }
+      const normalized = { ...g, status: normalizeGoatStatus(g.status) as Goat['status'] };
+      setGoat(normalized);
+      setImageUrl(g.imageUrl ?? null);
+      setStatus(normalizeGoatStatus(g.status));
     });
   }, [id]);
 
@@ -38,31 +65,86 @@ export default function EditGoatPage() {
   }
 
   const canEdit = canModifyRecord(goat.ownerId);
+  const previousStatus = normalizeGoatStatus(goat.status);
+
+  const save = async (
+    payload: PendingPayload,
+    sale?: {
+      salePrice: number;
+      saleBuyer: string;
+      salePaymentMethod: string;
+      salePaymentStatus: string;
+      saleDate: string;
+    }
+  ) => {
+    setSaving(true);
+    try {
+      await goatsService.update(goat.id, {
+        ...payload,
+        ...sale,
+      });
+      const leavingSold = previousStatus === 'Sold' && payload.status !== 'Sold';
+      toast(
+        leavingSold
+          ? 'Status updated — linked sale reverted from cashbook'
+          : sale
+            ? 'Marked as Sold — sale added to cashbook'
+            : 'Goat updated'
+      );
+      router.push(`/goats/${goat.id}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Update failed', 'error');
+    } finally {
+      setSaving(false);
+      setSaleOpen(false);
+      setPending(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!canEdit) return;
     const fd = new FormData(e.currentTarget);
-    try {
-      await goatsService.update(goat.id, {
-        tagNumber: String(fd.get('tagNumber') ?? '').trim(),
-        breed: String(fd.get('breed') ?? '').trim(),
-        gender: String(fd.get('gender')) as 'Male' | 'Female',
-        dateOfBirth: String(fd.get('dateOfBirth')),
-        weight: Number(fd.get('weight')),
-        color: String(fd.get('color') ?? '').trim(),
-        currentValue: Number(fd.get('currentValue')),
-        healthStatus: String(fd.get('healthStatus')),
-        vaccinationStatus: String(fd.get('vaccinationStatus')),
-        status: String(fd.get('status')),
-        imageUrl,
-        notes: String(fd.get('notes') ?? '') || null,
-      });
-      toast('Goat updated');
-      router.push(`/goats/${goat.id}`);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Update failed', 'error');
+    const nextStatus = String(fd.get('status') || status);
+    const payload: PendingPayload = {
+      tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+      breed: String(fd.get('breed') ?? '').trim(),
+      gender: String(fd.get('gender')) as 'Male' | 'Female',
+      dateOfBirth: String(fd.get('dateOfBirth')),
+      weight: Number(fd.get('weight')),
+      color: String(fd.get('color') ?? '').trim(),
+      currentValue: Number(fd.get('currentValue')),
+      vaccinationStatus: String(fd.get('vaccinationStatus')),
+      status: nextStatus,
+      imageUrl,
+      notes: String(fd.get('notes') ?? '') || null,
+    };
+
+    if (nextStatus === 'Sold' && previousStatus !== 'Sold') {
+      setPending(payload);
+      setSaleOpen(true);
+      return;
     }
+
+    await save(payload);
+  };
+
+  const confirmSale = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!pending) return;
+    const fd = new FormData(e.currentTarget);
+    const salePrice = Number(fd.get('salePrice'));
+    if (!(salePrice > 0)) {
+      toast('Enter a valid sale amount', 'error');
+      return;
+    }
+    await save(pending, {
+      salePrice,
+      saleBuyer: String(fd.get('saleBuyer') ?? '').trim() || 'Walk-in buyer',
+      salePaymentMethod: String(fd.get('salePaymentMethod') || 'Cash'),
+      salePaymentStatus: String(fd.get('salePaymentStatus') || 'Paid'),
+      saleDate: String(fd.get('saleDate') || new Date().toISOString().slice(0, 10)),
+    });
   };
 
   return (
@@ -80,7 +162,13 @@ export default function EditGoatPage() {
               disabled={!canEdit}
             />
           </div>
-          <Input name="tagNumber" label="Tag Number" defaultValue={goat.tagNumber} required disabled={!canEdit} />
+          <Input
+            name="tagNumber"
+            label="Tag Number"
+            defaultValue={goat.tagNumber}
+            required
+            disabled={!canEdit}
+          />
           <Input name="breed" label="Breed" defaultValue={goat.breed} required disabled={!canEdit} />
           <Select
             name="gender"
@@ -120,16 +208,6 @@ export default function EditGoatPage() {
             disabled={!canEdit}
           />
           <Select
-            name="healthStatus"
-            label="Health Status"
-            required
-            disabled={!canEdit}
-            defaultValue={goat.healthStatus}
-            options={(
-              ['Healthy', 'Sick', 'Under Treatment', 'Recovering'] as HealthStatus[]
-            ).map((v) => ({ label: v, value: v }))}
-          />
-          <Select
             name="vaccinationStatus"
             label="Vaccination"
             required
@@ -141,17 +219,35 @@ export default function EditGoatPage() {
           />
           <Select
             name="status"
-            label="Status"
+            label="Animal Status"
             required
             disabled={!canEdit}
-            defaultValue={goat.status}
-            options={(['Active', 'Sold', 'Deceased'] as GoatStatus[]).map((v) => ({
-              label: v,
-              value: v,
-            }))}
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            options={GOAT_STATUS_OPTIONS}
           />
+          {previousStatus === 'Sold' && status !== 'Sold' && (
+            <p className="sm:col-span-2 text-sm text-amber-800">
+              Changing away from Sold will remove the linked sale from the cashbook.
+            </p>
+          )}
+          {status === 'Pregnant' && goat.gender === 'Female' && (
+            <p className="sm:col-span-2 text-sm text-emerald-800">
+              When she gives birth, use{' '}
+              <Link href={`/kids/new?motherId=${goat.id}`} className="underline">
+                Record Birth
+              </Link>{' '}
+              — the kid is added to Kids and Animals, and mother returns to Healthy.
+            </p>
+          )}
           <div className="sm:col-span-2">
-            <Textarea name="notes" label="Notes" rows={3} defaultValue={goat.notes ?? ''} disabled={!canEdit} />
+            <Textarea
+              name="notes"
+              label="Notes"
+              rows={3}
+              defaultValue={goat.notes ?? ''}
+              disabled={!canEdit}
+            />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <Link href={`/goats/${goat.id}`}>
@@ -159,10 +255,81 @@ export default function EditGoatPage() {
                 Cancel
               </Button>
             </Link>
-            {canEdit && <Button type="submit">Save</Button>}
+            {canEdit && (
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            )}
           </div>
         </form>
       </Card>
+
+      <Modal
+        open={saleOpen}
+        onClose={() => {
+          if (!saving) {
+            setSaleOpen(false);
+            setPending(null);
+          }
+        }}
+        title="Record sale amount"
+        footer={null}
+      >
+        <p className="mb-4 text-sm text-muted-fg">
+          Marking this animal as Sold will add a sale entry to the cashbook. Enter the sale details
+          below.
+        </p>
+        <form onSubmit={(e) => void confirmSale(e)} className="grid gap-4">
+          <Input
+            name="salePrice"
+            label="Sale Amount (Rs.)"
+            type="number"
+            required
+            defaultValue={goat.currentValue}
+            min={1}
+          />
+          <Input name="saleBuyer" label="Buyer" placeholder="Walk-in buyer" />
+          <Input
+            name="saleDate"
+            label="Sale Date"
+            type="date"
+            required
+            defaultValue={new Date().toISOString().slice(0, 10)}
+          />
+          <Select
+            name="salePaymentStatus"
+            label="Payment Status"
+            required
+            defaultValue="Paid"
+            options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
+          />
+          <Select
+            name="salePaymentMethod"
+            label="Payment Method"
+            required
+            defaultValue="Cash"
+            options={(
+              ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
+            ).map((m) => ({ label: m, value: m }))}
+          />
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                setSaleOpen(false);
+                setPending(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Saving…' : 'Confirm sale'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

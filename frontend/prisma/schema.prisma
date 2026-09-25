@@ -118,7 +118,9 @@ model Goat {
   breedingsAsMale   Breeding[] @relation("BreedingMale")
   kidsAsMother      Kid[]      @relation("KidMother")
   kidsAsFather      Kid[]      @relation("KidFather")
+  kidProfile        Kid?       @relation("KidAsGoat")
   purchases         GoatPurchase[]
+  sales             Sale[]
   ownerId           String
   owner             User       @relation(fields: [ownerId], references: [id])
   deletedAt         DateTime?
@@ -168,6 +170,9 @@ model Kid {
   fatherId          String?
   mother            Goat      @relation("KidMother", fields: [motherId], references: [id])
   father            Goat?     @relation("KidFather", fields: [fatherId], references: [id], onDelete: SetNull)
+  /// Linked animal record in the main herd (created on birth)
+  goatId            String?   @unique
+  goat              Goat?     @relation("KidAsGoat", fields: [goatId], references: [id], onDelete: SetNull)
   weight            Decimal   @db.Decimal(8, 2)
   healthStatus      String
   vaccinationStatus String
@@ -217,6 +222,8 @@ model Sale {
   id            String    @id @default(cuid())
   date          DateTime  @db.Date
   tagNumber     String
+  goatId        String?
+  goat          Goat?     @relation(fields: [goatId], references: [id], onDelete: SetNull)
   buyer         String
   salePrice     Decimal   @db.Decimal(12, 2)
   paymentStatus String
@@ -231,6 +238,7 @@ model Sale {
 
   @@index([ownerId])
   @@index([tagNumber])
+  @@index([goatId])
   @@index([deletedAt])
   @@index([deletedAt, ownerId])
 }

@@ -7,7 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { goatsService } from '@/services/goats';
 import { PageHeader, Card, Input, Select, Textarea, Button, ImageUpload } from '@/components/ui';
-import type { GoatStatus, HealthStatus, VaccinationStatus } from '@/types/farm';
+import type { VaccinationStatus } from '@/types/farm';
+import { GOAT_STATUS_OPTIONS } from '@/lib/goatStatus';
 
 export default function NewGoatPage() {
   const router = useRouter();
@@ -27,9 +28,8 @@ export default function NewGoatPage() {
         weight: Number(fd.get('weight')),
         color: String(fd.get('color') ?? '').trim(),
         currentValue: Number(fd.get('currentValue')),
-        healthStatus: String(fd.get('healthStatus')),
         vaccinationStatus: String(fd.get('vaccinationStatus')),
-        status: String(fd.get('status')),
+        status: String(fd.get('status') || 'Healthy'),
         imageUrl,
         notes: String(fd.get('notes') ?? '') || null,
       });
@@ -65,14 +65,6 @@ export default function NewGoatPage() {
           <Input name="color" label="Color" required />
           <Input name="currentValue" label="Current Value (Rs.)" type="number" required />
           <Select
-            name="healthStatus"
-            label="Health Status"
-            required
-            options={(
-              ['Healthy', 'Sick', 'Under Treatment', 'Recovering'] as HealthStatus[]
-            ).map((v) => ({ label: v, value: v }))}
-          />
-          <Select
             name="vaccinationStatus"
             label="Vaccination"
             required
@@ -82,12 +74,10 @@ export default function NewGoatPage() {
           />
           <Select
             name="status"
-            label="Status"
+            label="Animal Status"
             required
-            options={(['Active', 'Sold', 'Deceased'] as GoatStatus[]).map((v) => ({
-              label: v,
-              value: v,
-            }))}
+            defaultValue="Healthy"
+            options={GOAT_STATUS_OPTIONS}
           />
           <div className="sm:col-span-2">
             <Textarea name="notes" label="Notes" rows={3} />

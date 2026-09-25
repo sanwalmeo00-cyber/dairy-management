@@ -55,7 +55,10 @@ export default function KidsPage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((k) => {
-      if (status && k.status !== status) return false;
+      if (status) {
+        const kStatus = k.status === 'Active' ? 'Healthy' : k.status;
+        if (kStatus !== status) return false;
+      }
       if (!q) return true;
       return (
         k.tagNumber.toLowerCase().includes(q) ||
@@ -88,8 +91,8 @@ export default function KidsPage() {
     <div>
       <PageHeader
         title="Kids"
-        description="Young goats from your breeding program."
-        action={{ label: 'Register Kid', href: '/kids/new' }}
+        description="Births from your herd. Each kid is also added to Animals."
+        action={{ label: 'Record Birth', href: '/kids/new' }}
       />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -100,11 +103,19 @@ export default function KidsPage() {
           className="sm:max-w-xs"
         />
         <Select
-          options={['Active', 'Sold', 'Deceased'].map((s) => ({ label: s, value: s }))}
+          options={[
+            { label: 'Healthy', value: 'Healthy' },
+            { label: 'Ill', value: 'Ill' },
+            { label: 'Under Treatment', value: 'Under Treatment' },
+            { label: 'Recovering', value: 'Recovering' },
+            { label: 'Pregnant', value: 'Pregnant' },
+            { label: 'Sold', value: 'Sold' },
+            { label: 'Deceased', value: 'Deceased' },
+          ]}
           placeholder="All statuses"
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="sm:w-40"
+          className="sm:w-44"
         />
       </div>
 
@@ -114,7 +125,11 @@ export default function KidsPage() {
         empty={
           <EmptyState
             title={loading ? 'Loading…' : 'No kids found'}
-            description={loading ? 'Fetching from the server.' : 'Register a kid or adjust filters.'}
+            description={
+              loading
+                ? 'Fetching from the server.'
+                : 'Record a birth when a pregnant animal delivers.'
+            }
           />
         }
         columns={[
@@ -136,7 +151,10 @@ export default function KidsPage() {
           {
             key: 'status',
             header: 'Status',
-            render: (k) => <Badge tone={statusTone(k.status)}>{k.status}</Badge>,
+            render: (k) => {
+              const label = k.status === 'Active' ? 'Healthy' : k.status;
+              return <Badge tone={statusTone(label)}>{label}</Badge>;
+            },
           },
           {
             key: 'owner',
@@ -154,6 +172,13 @@ export default function KidsPage() {
                     View
                   </Button>
                 </Link>
+                {k.goatId && (
+                  <Link href={`/goats/${k.goatId}`}>
+                    <Button variant="outline" size="sm">
+                      Animal
+                    </Button>
+                  </Link>
+                )}
                 {canModifyRecord(k.ownerId) && (
                   <Button variant="danger" size="sm" onClick={() => setDeleteId(k.id)}>
                     Delete

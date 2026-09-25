@@ -12,7 +12,15 @@ export type SoftDeleteEntity =
   | 'inventory';
 
 export type GoatGender = 'Male' | 'Female';
-export type GoatStatus = 'Active' | 'Sold' | 'Deceased';
+export type GoatStatus =
+  | 'Healthy'
+  | 'Ill'
+  | 'Under Treatment'
+  | 'Recovering'
+  | 'Pregnant'
+  | 'Sold'
+  | 'Deceased'
+  | 'Active'; // legacy — treated as Healthy
 export type HealthStatus = 'Healthy' | 'Sick' | 'Under Treatment' | 'Recovering';
 export type VaccinationStatus = 'Up to Date' | 'Due' | 'Overdue' | 'Not Vaccinated';
 
@@ -126,6 +134,8 @@ export interface Kid extends OwnedRecord {
   dateOfBirth: string;
   motherId: string;
   fatherId?: string;
+  /** Linked animal in the main Animals list */
+  goatId?: string;
   weight: number;
   healthStatus: HealthStatus;
   vaccinationStatus: VaccinationStatus;
@@ -164,6 +174,7 @@ export interface Sale extends OwnedRecord {
   id: string;
   date: string;
   tagNumber: string;
+  goatId?: string;
   buyer: string;
   salePrice: number;
   paymentStatus: PaymentStatus;

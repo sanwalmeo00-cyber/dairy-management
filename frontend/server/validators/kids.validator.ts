@@ -5,7 +5,16 @@ export const kidIdParamSchema = z.object({
 });
 
 const goatGender = z.enum(['Male', 'Female']);
-const goatStatus = z.enum(['Active', 'Sold', 'Deceased']);
+const goatStatus = z.enum([
+  'Healthy',
+  'Ill',
+  'Under Treatment',
+  'Recovering',
+  'Pregnant',
+  'Sold',
+  'Deceased',
+  'Active',
+]);
 const healthStatus = z.enum(['Healthy', 'Sick', 'Under Treatment', 'Recovering']);
 const vaccinationStatus = z.enum(['Up to Date', 'Due', 'Overdue', 'Not Vaccinated']);
 
@@ -22,12 +31,13 @@ export const createKidSchema = z.object({
   motherId: z.string().min(1),
   fatherId: z.string().min(1).optional().nullable(),
   weight: z.coerce.number().positive(),
-  healthStatus,
-  vaccinationStatus,
-  status: goatStatus.default('Active'),
+  healthStatus: healthStatus.optional(),
+  vaccinationStatus: vaccinationStatus.default('Not Vaccinated'),
+  status: goatStatus.default('Healthy'),
   imageUrl: z.string().url().optional().nullable().or(z.literal('')),
   notes: z.string().max(2000).optional().nullable(),
-  breedingId: z.string().min(1).optional().nullable(),
+  /** After birth, set mother from Pregnant → Healthy (default true) */
+  clearMotherPregnancy: z.boolean().optional().default(true),
 });
 
 export const updateKidSchema = createKidSchema.partial();

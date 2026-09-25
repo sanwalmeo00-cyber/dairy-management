@@ -12,6 +12,7 @@ function serialize(row: Prisma.SaleGetPayload<{ include: typeof ownerInclude }>)
     id: row.id,
     date: row.date.toISOString().slice(0, 10),
     tagNumber: row.tagNumber,
+    goatId: row.goatId ?? undefined,
     buyer: row.buyer,
     salePrice: Number(row.salePrice),
     paymentStatus: row.paymentStatus,

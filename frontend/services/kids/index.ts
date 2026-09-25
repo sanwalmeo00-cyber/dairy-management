@@ -8,13 +8,13 @@ export type KidInput = {
   motherId: string;
   fatherId?: string | null;
   weight: number;
-  healthStatus: string;
-  vaccinationStatus: string;
-  status: string;
+  healthStatus?: string;
+  vaccinationStatus?: string;
+  status?: string;
   notes?: string | null;
-  breedingId?: string | null;
   name?: string;
   imageUrl?: string | null;
+  clearMotherPregnancy?: boolean;
 };
 
 export const kidsService = {

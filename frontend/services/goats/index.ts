@@ -11,7 +11,7 @@ export type GoatInput = {
   currentValue: number;
   weight: number;
   color: string;
-  healthStatus: string;
+  healthStatus?: string;
   vaccinationStatus: string;
   status: string;
   imageUrl?: string | null;
@@ -19,6 +19,12 @@ export type GoatInput = {
   fatherId?: string | null;
   motherId?: string | null;
   name?: string;
+  /** When changing status to Sold */
+  salePrice?: number;
+  saleBuyer?: string;
+  salePaymentMethod?: string;
+  salePaymentStatus?: string;
+  saleDate?: string;
 };
 
 export const goatsService = {
