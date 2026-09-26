@@ -71,6 +71,14 @@ export interface OwnedRecord extends SoftDeletable {
   ownerName: string;
 }
 
+/** Cashbook rows: who handled cash vs who added the record */
+export interface FinanceRecord extends OwnedRecord {
+  addedById?: string;
+  addedByName?: string;
+  cashHandlerId?: string;
+  cashHandlerName?: string;
+}
+
 export interface DeletedRecord {
   id: string;
   entity: SoftDeleteEntity;
@@ -145,7 +153,7 @@ export interface Kid extends OwnedRecord {
   breedingId?: string;
 }
 
-export interface GoatPurchase extends OwnedRecord {
+export interface GoatPurchase extends FinanceRecord {
   id: string;
   date: string;
   tagNumber: string;
@@ -170,7 +178,7 @@ export interface Purchase extends OwnedRecord {
   notes?: string;
 }
 
-export interface Sale extends OwnedRecord {
+export interface Sale extends FinanceRecord {
   id: string;
   date: string;
   tagNumber: string;
@@ -182,7 +190,7 @@ export interface Sale extends OwnedRecord {
   notes?: string;
 }
 
-export interface Expense extends OwnedRecord {
+export interface Expense extends FinanceRecord {
   id: string;
   date: string;
   description: string;

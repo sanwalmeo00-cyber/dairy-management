@@ -22,8 +22,11 @@ import {
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export type CashbookKind = 'sale' | 'purchase' | 'expense';
 
@@ -38,6 +41,10 @@ type CashbookEntry = {
   status?: string;
   ownerId: string;
   ownerName: string;
+  addedById: string;
+  addedByName: string;
+  cashHandlerId: string;
+  cashHandlerName: string;
 };
 
 function toEntries(
@@ -57,6 +64,10 @@ function toEntries(
       status: r.paymentStatus,
       ownerId: r.ownerId,
       ownerName: r.ownerName,
+      addedById: r.addedById ?? r.ownerId,
+      addedByName: r.addedByName ?? r.ownerName,
+      cashHandlerId: r.cashHandlerId ?? r.ownerId,
+      cashHandlerName: r.cashHandlerName ?? r.ownerName,
     })),
     ...purchases.map((r) => ({
       id: `purchase-${r.id}`,
@@ -69,6 +80,10 @@ function toEntries(
       status: r.paymentStatus,
       ownerId: r.ownerId,
       ownerName: r.ownerName,
+      addedById: r.addedById ?? r.ownerId,
+      addedByName: r.addedByName ?? r.ownerName,
+      cashHandlerId: r.cashHandlerId ?? r.ownerId,
+      cashHandlerName: r.cashHandlerName ?? r.ownerName,
     })),
     ...expenses.map((r) => ({
       id: `expense-${r.id}`,
@@ -81,6 +96,10 @@ function toEntries(
       status: r.paymentMethod,
       ownerId: r.ownerId,
       ownerName: r.ownerName,
+      addedById: r.addedById ?? r.ownerId,
+      addedByName: r.addedByName ?? r.ownerName,
+      cashHandlerId: r.cashHandlerId ?? r.ownerId,
+      cashHandlerName: r.cashHandlerName ?? r.ownerName,
     })),
   ].sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description));
 }
@@ -133,7 +152,10 @@ export default function CashbookPage() {
 
   const userOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const e of entries) map.set(e.ownerId, e.ownerName);
+    for (const e of entries) {
+      map.set(e.cashHandlerId, e.cashHandlerName);
+      map.set(e.addedById, e.addedByName);
+    }
     return [...map.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -143,16 +165,22 @@ export default function CashbookPage() {
     const q = search.toLowerCase();
     return entries.filter((r) => {
       if (kind && r.kind !== kind) return false;
-      if (userId && r.ownerId !== userId) return false;
+      if (userId && r.cashHandlerId !== userId && r.addedById !== userId) return false;
       if (!q) return true;
       return (
         r.description.toLowerCase().includes(q) ||
         r.party.toLowerCase().includes(q) ||
-        r.ownerName.toLowerCase().includes(q) ||
+        r.cashHandlerName.toLowerCase().includes(q) ||
+        r.addedByName.toLowerCase().includes(q) ||
         KIND_LABEL[r.kind].toLowerCase().includes(q)
       );
     });
   }, [entries, search, kind, userId]);
+
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${kind}|${userId}`
+  );
 
   const moneyIn = filtered
     .filter((r) => r.direction === 'in')
@@ -242,46 +270,46 @@ export default function CashbookPage() {
         />
       </div>
 
-      <Table
-        data={filtered}
-        rowKey={(r) => r.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No cashbook entries'}
-            description={
-              loading
-                ? 'Fetching sales, purchases, and expenses.'
-                : 'Record a sale, purchase, or expense to get started.'
+      {loading ? (
+        <LoadingState label="Loading cashbook…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(r) => r.id}
+            empty={
+              <EmptyState
+                title="No cashbook entries"
+                description="Record a sale, purchase, or expense to get started."
+              />
             }
-          />
-        }
-        columns={[
-          { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
-          {
-            key: 'type',
-            header: 'Type',
-            render: (r) => (
-              <Badge
-                tone={
-                  r.kind === 'sale' ? 'success' : r.kind === 'purchase' ? 'info' : 'warning'
-                }
-              >
-                {KIND_LABEL[r.kind]}
-              </Badge>
-            ),
-          },
-          { key: 'desc', header: 'Description', render: (r) => r.description },
-          { key: 'party', header: 'Party', render: (r) => r.party },
-          {
-            key: 'amount',
-            header: 'Amount',
-            render: (r) => (
-              <span className={r.direction === 'in' ? 'text-emerald-700' : 'text-red-700'}>
-                {r.direction === 'in' ? '+' : '−'}
-                {formatCurrency(r.amount)}
-              </span>
-            ),
-          },
+            columns={[
+              { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
+              {
+                key: 'type',
+                header: 'Type',
+                render: (r) => (
+                  <Badge
+                    tone={
+                      r.kind === 'sale' ? 'success' : r.kind === 'purchase' ? 'info' : 'warning'
+                    }
+                  >
+                    {KIND_LABEL[r.kind]}
+                  </Badge>
+                ),
+              },
+              { key: 'desc', header: 'Description', render: (r) => r.description },
+              { key: 'party', header: 'Party', render: (r) => r.party },
+              {
+                key: 'amount',
+                header: 'Amount',
+                render: (r) => (
+                  <span className={r.direction === 'in' ? 'text-emerald-700' : 'text-red-700'}>
+                    {r.direction === 'in' ? '+' : '−'}
+                    {formatCurrency(r.amount)}
+                  </span>
+                ),
+              },
           {
             key: 'money',
             header: 'Paid / Received by',
@@ -290,8 +318,18 @@ export default function CashbookPage() {
                 <span className="text-xs text-muted-fg">
                   {r.direction === 'in' ? 'Received' : 'Paid'}
                 </span>
-                <OwnerBadge name={r.ownerName} isOwn={isOwnerOf(r.ownerId)} />
+                <OwnerBadge
+                  name={r.cashHandlerName}
+                  isOwn={isOwnerOf(r.cashHandlerId)}
+                />
               </div>
+            ),
+          },
+          {
+            key: 'addedBy',
+            header: 'Record added by',
+            render: (r) => (
+              <OwnerBadge name={r.addedByName} isOwn={isOwnerOf(r.addedById)} />
             ),
           },
           {
@@ -313,6 +351,9 @@ export default function CashbookPage() {
           },
         ]}
       />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!deleteTarget}

@@ -6,7 +6,17 @@ import { useParams } from 'next/navigation';
 import { kidsService } from '@/services/kids';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
-import { PageHeader, Card, Badge, statusTone, Button, ViewOnlyBanner, OwnerBadge } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  Badge,
+  statusTone,
+  Button,
+  ViewOnlyBanner,
+  OwnerBadge,
+  LoadingState,
+  Skeleton,
+} from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import type { Goat, Kid } from '@/types/farm';
 
@@ -15,13 +25,53 @@ export default function KidDetailPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
   const [kid, setKid] = useState<Kid | null>(null);
   const [goats, setGoats] = useState<Goat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    void kidsService.getById(id).then((k) => setKid(k ?? null));
-    void goatsService.getAll().then(setGoats);
+    let cancelled = false;
+    setLoading(true);
+    setNotFound(false);
+    void (async () => {
+      try {
+        const [k, herd] = await Promise.all([kidsService.getById(id), goatsService.getAll()]);
+        if (cancelled) return;
+        if (!k) {
+          setKid(null);
+          setNotFound(true);
+          return;
+        }
+        setKid(k);
+        setGoats(herd);
+      } catch {
+        if (!cancelled) {
+          setKid(null);
+          setNotFound(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  if (!kid) return <p className="text-sm text-muted-fg">Kid not found.</p>;
+  if (loading) {
+    return (
+      <div>
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <LoadingState label="Loading kid details…" />
+      </div>
+    );
+  }
+
+  if (notFound || !kid) {
+    return <p className="text-sm text-muted-fg">Kid not found.</p>;
+  }
 
   const canEdit = canModifyRecord(kid.ownerId);
   const goatTag = (goatId?: string) => {

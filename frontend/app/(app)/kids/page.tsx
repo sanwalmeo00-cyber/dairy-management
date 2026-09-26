@@ -18,8 +18,11 @@ import {
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function KidsPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
@@ -33,7 +36,7 @@ export default function KidsPage() {
 
   const goatTag = useCallback(
     (id: string) => goats.find((g) => g.id === id)?.tagNumber ?? id,
-    [goats],
+    [goats]
   );
 
   useEffect(() => {
@@ -66,6 +69,11 @@ export default function KidsPage() {
       );
     });
   }, [rows, search, status, goatTag]);
+
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${status}`
+  );
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -119,76 +127,79 @@ export default function KidsPage() {
         />
       </div>
 
-      <Table
-        data={filtered}
-        rowKey={(k) => k.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No kids found'}
-            description={
-              loading
-                ? 'Fetching from the server.'
-                : 'Record a birth when a pregnant animal delivers.'
+      {loading ? (
+        <LoadingState label="Loading kids…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(k) => k.id}
+            empty={
+              <EmptyState
+                title="No kids found"
+                description="Record a birth when a pregnant animal delivers."
+              />
             }
+            columns={[
+              {
+                key: 'photo',
+                header: '',
+                render: (k) =>
+                  k.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={k.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
+                  ) : (
+                    <span className="inline-block h-9 w-9 rounded-md bg-muted" />
+                  ),
+              },
+              { key: 'tag', header: 'Tag', render: (k) => k.tagNumber },
+              { key: 'gender', header: 'Gender', render: (k) => k.gender },
+              { key: 'dob', header: 'DOB', render: (k) => formatDate(k.dateOfBirth) },
+              { key: 'mother', header: 'Mother', render: (k) => goatTag(k.motherId) },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (k) => {
+                  const label = k.status === 'Active' ? 'Healthy' : k.status;
+                  return <Badge tone={statusTone(label)}>{label}</Badge>;
+                },
+              },
+              {
+                key: 'owner',
+                header: 'Owner',
+                render: (k) => <OwnerBadge name={k.ownerName} isOwn={isOwnerOf(k.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (k) => (
+                  <div className="flex justify-end gap-1">
+                    <Link href={`/kids/${k.id}`}>
+                      <Button variant="ghost" size="sm">
+                        View
+                      </Button>
+                    </Link>
+                    {k.goatId && (
+                      <Link href={`/goats/${k.goatId}`}>
+                        <Button variant="outline" size="sm">
+                          Animal
+                        </Button>
+                      </Link>
+                    )}
+                    {canModifyRecord(k.ownerId) && (
+                      <Button variant="danger" size="sm" onClick={() => setDeleteId(k.id)}>
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
           />
-        }
-        columns={[
-          {
-            key: 'photo',
-            header: '',
-            render: (k) =>
-              k.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={k.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
-              ) : (
-                <span className="inline-block h-9 w-9 rounded-md bg-muted" />
-              ),
-          },
-          { key: 'tag', header: 'Tag', render: (k) => k.tagNumber },
-          { key: 'gender', header: 'Gender', render: (k) => k.gender },
-          { key: 'dob', header: 'DOB', render: (k) => formatDate(k.dateOfBirth) },
-          { key: 'mother', header: 'Mother', render: (k) => goatTag(k.motherId) },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (k) => {
-              const label = k.status === 'Active' ? 'Healthy' : k.status;
-              return <Badge tone={statusTone(label)}>{label}</Badge>;
-            },
-          },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (k) => <OwnerBadge name={k.ownerName} isOwn={isOwnerOf(k.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (k) => (
-              <div className="flex justify-end gap-1">
-                <Link href={`/kids/${k.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-                {k.goatId && (
-                  <Link href={`/goats/${k.goatId}`}>
-                    <Button variant="outline" size="sm">
-                      Animal
-                    </Button>
-                  </Link>
-                )}
-                {canModifyRecord(k.ownerId) && (
-                  <Button variant="danger" size="sm" onClick={() => setDeleteId(k.id)}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!deleteId}

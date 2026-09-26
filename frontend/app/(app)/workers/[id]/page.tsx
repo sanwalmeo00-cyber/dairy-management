@@ -19,6 +19,8 @@ import {
   Select,
   Textarea,
   EmptyState,
+  LoadingState,
+  Skeleton,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 
@@ -36,21 +38,40 @@ export default function WorkerDetailPage() {
   const [summary, setSummary] = useState<WorkerMonthSummary | null>(null);
   const [month, setMonth] = useState(currentMonth());
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    const w = await workersService.getById(id);
-    setWorker(w ?? null);
-    if (!w) return;
-    setPayments(await workersService.getPayments(id));
-    setSummary(await workersService.getMonthSummary(id, month));
+  const load = async (showPageLoading = false) => {
+    if (showPageLoading) setLoading(true);
+    try {
+      const w = await workersService.getById(id);
+      setWorker(w ?? null);
+      if (!w) return;
+      setPayments(await workersService.getPayments(id));
+      setSummary(await workersService.getMonthSummary(id, month));
+    } finally {
+      if (showPageLoading) setLoading(false);
+    }
   };
 
   useEffect(() => {
-    void load().catch((err) => {
+    void load(true).catch((err) => {
       toast(err instanceof Error ? err.message : 'Failed to load worker', 'error');
+      setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, month]);
+  }, [id]);
+
+  useEffect(() => {
+    if (!worker) return;
+    void (async () => {
+      try {
+        setSummary(await workersService.getMonthSummary(id, month));
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to load summary', 'error');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
 
   const monthPayments = useMemo(
     () => payments.filter((p) => p.forMonth === month),
@@ -59,7 +80,7 @@ export default function WorkerDetailPage() {
 
   const onRecordPayment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!worker || !canModifyRecord(worker.ownerId)) return;
+    if (!worker || !canModifyRecord(worker.ownerId) || saving) return;
     const fd = new FormData(e.currentTarget);
     setSaving(true);
     try {
@@ -74,13 +95,25 @@ export default function WorkerDetailPage() {
       });
       toast('Payment recorded');
       e.currentTarget.reset();
-      await load();
+      await load(false);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to record payment', 'error');
     } finally {
       setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div>
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <LoadingState label="Loading worker…" />
+      </div>
+    );
+  }
 
   if (!worker) return <p className="text-sm text-muted-fg">Worker not found.</p>;
 
@@ -189,8 +222,8 @@ export default function WorkerDetailPage() {
               <Textarea name="notes" label="Notes" rows={2} />
             </div>
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : 'Save payment'}
+              <Button type="submit" loading={saving} loadingText="Saving…">
+                Save payment
               </Button>
             </div>
           </form>

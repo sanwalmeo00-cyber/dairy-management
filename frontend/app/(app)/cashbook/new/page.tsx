@@ -12,7 +12,7 @@ import {
 } from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { PageHeader, Card, Input, Select, Textarea, Button } from '@/components/ui';
+import { PageHeader, Card, Input, Select, Textarea, Button, LoadingState } from '@/components/ui';
 import type { ExpenseCategory, PaymentMethod } from '@/types/farm';
 
 type EntryType = 'sale' | 'purchase' | 'expense';
@@ -27,11 +27,10 @@ function NewCashbookEntryForm() {
   const [type, setType] = useState<EntryType>(
     ['sale', 'purchase', 'expense'].includes(initialType) ? initialType : 'sale'
   );
-  const [ownerId, setOwnerId] = useState(currentUser.id);
-  const [partners, setPartners] = useState<FinanceUserOption[]>([
-    { id: currentUser.id, name: currentUser.name },
-  ]);
+  const [cashHandlerId, setCashHandlerId] = useState(currentUser.id);
+  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
 
   useEffect(() => {
     void (async () => {
@@ -39,24 +38,26 @@ function NewCashbookEntryForm() {
         const options = await financeUsersService.getOptions();
         if (options.length) {
           setPartners(options);
-          if (!options.some((o) => o.id === ownerId)) {
-            setOwnerId(options[0].id);
-          }
+          setCashHandlerId((prev) =>
+            options.some((o) => o.id === prev) ? prev : options[0].id
+          );
         }
       } catch {
-        /* keep current user only */
+        /* keep empty */
+      } finally {
+        setLoadingUsers(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const moneyLabel =
-    type === 'sale' ? 'Received by (user)' : 'Paid by (user)';
+    type === 'sale' ? 'Cash received by' : 'Cash paid / sent by';
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (saving) return;
     const fd = new FormData(e.currentTarget);
-    const selectedOwner = String(fd.get('ownerId') || ownerId);
+    const selectedHandler = String(fd.get('cashHandlerId') || cashHandlerId);
     setSaving(true);
     try {
       if (type === 'sale') {
@@ -68,7 +69,7 @@ function NewCashbookEntryForm() {
           paymentStatus: String(fd.get('paymentStatus')),
           paymentMethod: String(fd.get('paymentMethod')),
           notes: String(fd.get('notes') ?? '') || null,
-          ownerId: selectedOwner,
+          cashHandlerId: selectedHandler,
         });
         toast('Sale recorded');
       } else if (type === 'purchase') {
@@ -79,7 +80,7 @@ function NewCashbookEntryForm() {
           purchasePrice: Number(fd.get('purchasePrice')),
           paymentStatus: String(fd.get('paymentStatus')),
           notes: String(fd.get('notes') ?? '') || null,
-          ownerId: selectedOwner,
+          cashHandlerId: selectedHandler,
         });
         toast('Purchase recorded');
       } else {
@@ -90,29 +91,33 @@ function NewCashbookEntryForm() {
           amount: Number(fd.get('amount')),
           paymentMethod: String(fd.get('paymentMethod')),
           notes: String(fd.get('notes') ?? '') || null,
-          ownerId: selectedOwner,
+          cashHandlerId: selectedHandler,
         });
         toast('Expense recorded');
       }
       router.push('/cashbook');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to save entry', 'error');
-    } finally {
       setSaving(false);
     }
   };
+
+  if (loadingUsers) {
+    return <LoadingState label="Loading users…" />;
+  }
 
   return (
     <div>
       <PageHeader
         title="New Cashbook Entry"
-        description="Record a sale, purchase, or expense and choose who paid or received the money."
+        description="Choose who handled the cash. Record added by is always you."
       />
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
           <Select
             label="Entry type"
             required
+            disabled={saving}
             options={[
               { label: 'Sale (money in)', value: 'sale' },
               { label: 'Animal purchase (money out)', value: 'purchase' },
@@ -122,31 +127,69 @@ function NewCashbookEntryForm() {
             onChange={(e) => setType(e.target.value as EntryType)}
           />
           <Select
-            name="ownerId"
+            name="cashHandlerId"
             label={moneyLabel}
             required
-            options={partners.map((p) => ({ label: p.name, value: p.id }))}
-            value={ownerId}
-            onChange={(e) => setOwnerId(e.target.value)}
+            disabled={saving}
+            options={
+              partners.length
+                ? partners.map((p) => ({ label: p.name, value: p.id }))
+                : [{ label: currentUser.name, value: currentUser.id }]
+            }
+            value={cashHandlerId}
+            onChange={(e) => setCashHandlerId(e.target.value)}
+          />
+          <Input
+            label="Record added by"
+            value={currentUser.name}
+            disabled
+            hint="Automatically set to the logged-in user"
           />
 
-          <Input name="date" label="Date" type="date" required />
+          <Input
+            name="date"
+            label="Date"
+            type="date"
+            required
+            disabled={saving}
+            defaultValue={new Date().toISOString().slice(0, 10)}
+          />
 
           {type === 'sale' && (
             <>
-              <Input name="tagNumber" label="Tag Number" required placeholder="e.g. G001" />
-              <Input name="buyer" label="Buyer" required className="sm:col-span-2" />
-              <Input name="salePrice" label="Sale Price (Rs.)" type="number" required />
+              <Input
+                name="tagNumber"
+                label="Tag Number"
+                required
+                placeholder="e.g. G001"
+                disabled={saving}
+              />
+              <Input
+                name="buyer"
+                label="Buyer"
+                required
+                className="sm:col-span-2"
+                disabled={saving}
+              />
+              <Input
+                name="salePrice"
+                label="Sale Price (Rs.)"
+                type="number"
+                required
+                disabled={saving}
+              />
               <Select
                 name="paymentStatus"
                 label="Payment Status"
                 required
+                disabled={saving}
                 options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
               />
               <Select
                 name="paymentMethod"
                 label="Payment Method"
                 required
+                disabled={saving}
                 options={(
                   ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
                 ).map((m) => ({ label: m, value: m }))}
@@ -156,13 +199,32 @@ function NewCashbookEntryForm() {
 
           {type === 'purchase' && (
             <>
-              <Input name="tagNumber" label="Tag Number" required placeholder="e.g. G001" />
-              <Input name="seller" label="Seller" required className="sm:col-span-2" />
-              <Input name="purchasePrice" label="Purchase Price (Rs.)" type="number" required />
+              <Input
+                name="tagNumber"
+                label="Tag Number"
+                required
+                placeholder="e.g. G001"
+                disabled={saving}
+              />
+              <Input
+                name="seller"
+                label="Seller"
+                required
+                className="sm:col-span-2"
+                disabled={saving}
+              />
+              <Input
+                name="purchasePrice"
+                label="Purchase Price (Rs.)"
+                type="number"
+                required
+                disabled={saving}
+              />
               <Select
                 name="paymentStatus"
                 label="Payment Status"
                 required
+                disabled={saving}
                 options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
               />
             </>
@@ -174,6 +236,7 @@ function NewCashbookEntryForm() {
                 name="category"
                 label="Category"
                 required
+                disabled={saving}
                 options={(
                   [
                     'Feed',
@@ -188,12 +251,25 @@ function NewCashbookEntryForm() {
                   ] as ExpenseCategory[]
                 ).map((c) => ({ label: c, value: c }))}
               />
-              <Input name="description" label="Description" required className="sm:col-span-2" />
-              <Input name="amount" label="Amount (Rs.)" type="number" required />
+              <Input
+                name="description"
+                label="Description"
+                required
+                className="sm:col-span-2"
+                disabled={saving}
+              />
+              <Input
+                name="amount"
+                label="Amount (Rs.)"
+                type="number"
+                required
+                disabled={saving}
+              />
               <Select
                 name="paymentMethod"
                 label="Payment Method"
                 required
+                disabled={saving}
                 options={(
                   ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
                 ).map((m) => ({ label: m, value: m }))}
@@ -202,16 +278,16 @@ function NewCashbookEntryForm() {
           )}
 
           <div className="sm:col-span-2">
-            <Textarea name="notes" label="Notes" rows={3} />
+            <Textarea name="notes" label="Notes" rows={3} disabled={saving} />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <Link href="/cashbook">
-              <Button type="button" variant="outline">
+              <Button type="button" variant="outline" disabled={saving}>
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
+            <Button type="submit" loading={saving}>
+              Save
             </Button>
           </div>
         </form>
@@ -222,7 +298,7 @@ function NewCashbookEntryForm() {
 
 export default function NewCashbookEntryPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-fg">Loading…</p>}>
+    <Suspense fallback={<LoadingState label="Loading…" />}>
       <NewCashbookEntryForm />
     </Suspense>
   );

@@ -36,6 +36,8 @@ export const createGoatSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   fatherId: z.string().min(1).optional().nullable(),
   motherId: z.string().min(1).optional().nullable(),
+  /** User who paid purchase cash (not Super Admin) */
+  purchaseCashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export const updateGoatSchema = createGoatSchema.partial().extend({
@@ -45,6 +47,8 @@ export const updateGoatSchema = createGoatSchema.partial().extend({
   salePaymentMethod: paymentMethod.optional(),
   salePaymentStatus: paymentStatus.optional(),
   saleDate: dateString.optional(),
+  /** User who received sale cash (not Super Admin) */
+  saleCashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export type CreateGoatInput = z.infer<typeof createGoatSchema>;

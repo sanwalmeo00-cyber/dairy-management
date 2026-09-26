@@ -28,8 +28,10 @@ export const createExpenseSchema = z.object({
   amount: z.coerce.number().nonnegative(),
   paymentMethod,
   notes: z.string().max(2000).optional().nullable(),
-  /** User who provided / paid the money */
+  /** @deprecated use cashHandlerId */
   ownerId: z.string().min(1).optional().nullable(),
+  /** User who paid the money (not Super Admin) */
+  cashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export const updateExpenseSchema = createExpenseSchema.partial();

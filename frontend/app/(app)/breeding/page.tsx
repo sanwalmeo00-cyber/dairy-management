@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { LoadingState } from '@/components/ui';
 
 /** Breeding removed — use Pregnant status + Record Birth under Kids. */
 export default function BreedingRedirect() {
@@ -9,5 +10,5 @@ export default function BreedingRedirect() {
   useEffect(() => {
     router.replace('/kids');
   }, [router]);
-  return <p className="text-sm text-muted-fg">Redirecting to Kids…</p>;
+  return <LoadingState label="Redirecting to Kids…" />;
 }

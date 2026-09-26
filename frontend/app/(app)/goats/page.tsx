@@ -17,8 +17,12 @@ import {
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatAgeMonths } from '@/lib/format';
+
+const PAGE_SIZE = 10;
 
 export default function GoatsPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
@@ -27,6 +31,7 @@ export default function GoatsPage() {
   const [search, setSearch] = useState('');
   const [gender, setGender] = useState('');
   const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +52,10 @@ export default function GoatsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, gender, status]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((g) => {
@@ -59,6 +68,13 @@ export default function GoatsPage() {
       return g.tagNumber.toLowerCase().includes(q) || g.breed.toLowerCase().includes(q);
     });
   }, [rows, search, gender, status]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -122,73 +138,85 @@ export default function GoatsPage() {
         />
       </div>
 
-      <Table
-        data={filtered}
-        rowKey={(g) => g.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No animals found'}
-            description={loading ? 'Fetching animals from the server.' : 'Try adjusting filters or add a new animal.'}
-          />
-        }
-        columns={[
-          {
-            key: 'photo',
-            header: '',
-            render: (g) =>
-              g.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={g.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
-              ) : (
-                <span className="inline-block h-9 w-9 rounded-md bg-muted" />
-              ),
-          },
-          { key: 'tag', header: 'Tag', render: (g) => g.tagNumber },
-          { key: 'breed', header: 'Breed', render: (g) => g.breed },
-          { key: 'gender', header: 'Gender', render: (g) => g.gender },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (g) => {
-              const label = g.status === 'Active' ? 'Healthy' : g.status;
-              return <Badge tone={statusTone(label)}>{label}</Badge>;
-            },
-          },
-          { key: 'dob', header: 'DOB', render: (g) => formatDate(g.dateOfBirth) },
-          { key: 'value', header: 'Value', render: (g) => formatCurrency(g.currentValue) },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (g) => <OwnerBadge name={g.ownerName} isOwn={isOwnerOf(g.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (g) => (
-              <div className="flex justify-end gap-1">
-                <Link href={`/goats/${g.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-                {canModifyRecord(g.ownerId) && (
-                  <>
-                    <Link href={`/goats/${g.id}/edit`}>
-                      <Button variant="outline" size="sm">
-                        Edit
+      {loading ? (
+        <LoadingState label="Loading animals…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(g) => g.id}
+            empty={
+              <EmptyState
+                title="No animals found"
+                description="Try adjusting filters or add a new animal."
+              />
+            }
+            columns={[
+              {
+                key: 'photo',
+                header: '',
+                render: (g) =>
+                  g.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={g.imageUrl} alt="" className="h-9 w-9 rounded-md object-cover" />
+                  ) : (
+                    <span className="inline-block h-9 w-9 rounded-md bg-muted" />
+                  ),
+              },
+              { key: 'tag', header: 'Tag', render: (g) => g.tagNumber },
+              { key: 'breed', header: 'Breed', render: (g) => g.breed },
+              { key: 'gender', header: 'Gender', render: (g) => g.gender },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (g) => {
+                  const label = g.status === 'Active' ? 'Healthy' : g.status;
+                  return <Badge tone={statusTone(label)}>{label}</Badge>;
+                },
+              },
+              { key: 'age', header: 'Age', render: (g) => formatAgeMonths(g.dateOfBirth) },
+              { key: 'value', header: 'Value', render: (g) => formatCurrency(g.currentValue) },
+              {
+                key: 'owner',
+                header: 'Added by',
+                render: (g) => <OwnerBadge name={g.ownerName} isOwn={isOwnerOf(g.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (g) => (
+                  <div className="flex justify-end gap-1">
+                    <Link href={`/goats/${g.id}`}>
+                      <Button variant="ghost" size="sm">
+                        View
                       </Button>
                     </Link>
-                    <Button variant="danger" size="sm" onClick={() => setDeleteId(g.id)}>
-                      Delete
-                    </Button>
-                  </>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+                    {canModifyRecord(g.ownerId) && (
+                      <>
+                        <Link href={`/goats/${g.id}/edit`}>
+                          <Button variant="outline" size="sm">
+                            Edit
+                          </Button>
+                        </Link>
+                        <Button variant="danger" size="sm" onClick={() => setDeleteId(g.id)}>
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+          />
+          <Pagination
+            page={safePage}
+            pageSize={PAGE_SIZE}
+            total={filtered.length}
+            onPageChange={setPage}
+          />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!deleteId}
