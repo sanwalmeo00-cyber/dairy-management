@@ -18,9 +18,12 @@ export const POST = apiRoute(async (request) => {
     createGoatPurchaseSchema,
     await readJson(request)
   );
-  const ownerId = await resolveFinanceOwnerId(user.userId, body.ownerId);
+  const cashHandlerId = await resolveFinanceOwnerId(
+    user.userId,
+    body.cashHandlerId ?? body.ownerId
+  );
   return jsonSuccess(
-    await goatPurchasesService.create(body, ownerId),
+    await goatPurchasesService.create(body, user.userId, cashHandlerId),
     201,
     'Goat purchase created'
   );

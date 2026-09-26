@@ -7,7 +7,22 @@ const ownerInclude = {
   owner: { select: { id: true, name: true } },
 } as const;
 
-function serialize(row: Prisma.ExpenseGetPayload<{ include: typeof ownerInclude }>) {
+type ExpenseRow = Prisma.ExpenseGetPayload<{ include: typeof ownerInclude }>;
+
+async function cashHandlerNames(ids: (string | null | undefined)[]) {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!unique.length) return new Map<string, string>();
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique } },
+    select: { id: true, name: true },
+  });
+  return new Map(users.map((u) => [u.id, u.name]));
+}
+
+function serialize(row: ExpenseRow, handlerNames: Map<string, string>) {
+  const cashHandlerId = row.cashHandlerId ?? row.ownerId;
+  const cashHandlerName =
+    handlerNames.get(cashHandlerId) ?? row.owner.name;
   return {
     id: row.id,
     date: row.date.toISOString().slice(0, 10),
@@ -18,6 +33,10 @@ function serialize(row: Prisma.ExpenseGetPayload<{ include: typeof ownerInclude 
     notes: row.notes ?? undefined,
     ownerId: row.ownerId,
     ownerName: row.owner.name,
+    addedById: row.ownerId,
+    addedByName: row.owner.name,
+    cashHandlerId,
+    cashHandlerName,
     deletedAt: row.deletedAt?.toISOString() ?? null,
     deletedBy: row.deletedBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -39,7 +58,8 @@ export class ExpensesService {
       include: ownerInclude,
       orderBy: { date: 'desc' },
     });
-    return rows.map(serialize);
+    const names = await cashHandlerNames(rows.map((r) => r.cashHandlerId));
+    return rows.map((row) => serialize(row, names));
   }
 
   async findById(id: string) {
@@ -48,10 +68,11 @@ export class ExpensesService {
       include: ownerInclude,
     });
     if (!row) throw new NotFoundError('Expense not found');
-    return serialize(row);
+    const names = await cashHandlerNames([row.cashHandlerId]);
+    return serialize(row, names);
   }
 
-  async create(input: CreateExpenseInput, ownerId: string) {
+  async create(input: CreateExpenseInput, addedById: string, cashHandlerId: string) {
     const row = await prisma.expense.create({
       data: {
         date: new Date(input.date),
@@ -60,11 +81,13 @@ export class ExpensesService {
         amount: input.amount,
         paymentMethod: input.paymentMethod,
         notes: input.notes ?? undefined,
-        ownerId,
+        ownerId: addedById,
       },
       include: ownerInclude,
     });
-    return serialize(row);
+    await prisma.$executeRaw`UPDATE Expense SET cashHandlerId = ${cashHandlerId} WHERE id = ${row.id}`;
+    const names = await cashHandlerNames([cashHandlerId]);
+    return serialize({ ...row, cashHandlerId }, names);
   }
 
   async update(id: string, input: UpdateExpenseInput, userId: string, role: Role) {
@@ -72,6 +95,7 @@ export class ExpensesService {
     if (!existing) throw new NotFoundError('Expense not found');
     assertCanModify(existing.ownerId, userId, role);
 
+    const nextHandler = input.cashHandlerId ?? input.ownerId;
     const row = await prisma.expense.update({
       where: { id },
       data: {
@@ -84,7 +108,11 @@ export class ExpensesService {
       },
       include: ownerInclude,
     });
-    return serialize(row);
+    if (nextHandler) {
+      await prisma.$executeRaw`UPDATE Expense SET cashHandlerId = ${nextHandler} WHERE id = ${id}`;
+    }
+    const names = await cashHandlerNames([nextHandler ?? row.cashHandlerId]);
+    return serialize({ ...row, cashHandlerId: nextHandler ?? row.cashHandlerId }, names);
   }
 
   async remove(id: string, userId: string, role: Role) {
@@ -97,7 +125,8 @@ export class ExpensesService {
       data: { deletedAt: new Date(), deletedBy: userId },
       include: ownerInclude,
     });
-    return serialize(row);
+    const names = await cashHandlerNames([row.cashHandlerId]);
+    return serialize(row, names);
   }
 }
 

@@ -12,6 +12,13 @@ export const GET = apiRoute(async (request) => {
 export const POST = apiRoute(async (request) => {
   const user = requireAuth(request, [...FARM_ROLES]);
   const body = parseWithSchema<CreateSaleInput>(createSaleSchema, await readJson(request));
-  const ownerId = await resolveFinanceOwnerId(user.userId, body.ownerId);
-  return jsonSuccess(await salesService.create(body, ownerId), 201, 'Sale created');
+  const cashHandlerId = await resolveFinanceOwnerId(
+    user.userId,
+    body.cashHandlerId ?? body.ownerId
+  );
+  return jsonSuccess(
+    await salesService.create(body, user.userId, cashHandlerId),
+    201,
+    'Sale created'
+  );
 });

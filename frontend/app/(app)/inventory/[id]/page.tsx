@@ -15,6 +15,7 @@ import {
   Button,
   Table,
   OwnerBadge,
+  LoadingState,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 
@@ -41,7 +42,7 @@ export default function InventoryDetailPage() {
     })();
   }, [id, toast]);
 
-  if (loading) return <p className="text-sm text-muted-fg">Loading…</p>;
+  if (loading) return <LoadingState label="Loading item…" />;
   if (!item) return <p className="text-sm text-muted-fg">Item not found.</p>;
 
   return (

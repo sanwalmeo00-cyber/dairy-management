@@ -8,7 +8,7 @@ export function ViewOnlyBanner({ ownerName }: { ownerName: string }) {
       <div>
         <p className="font-medium">View Only</p>
         <p className="text-amber-800/90">
-          This record belongs to {ownerName}. You can view it but cannot modify it.
+          This record was added by {ownerName}. You can view it but cannot modify it.
         </p>
       </div>
     </div>

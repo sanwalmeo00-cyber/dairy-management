@@ -45,6 +45,10 @@ model User {
   goatPurchases GoatPurchase[]
   sales        Sale[]
   expenses     Expense[]
+  /// Cashbook: user who paid/received (when different from record owner)
+  cashHandledPurchases GoatPurchase[] @relation("GoatPurchaseCashHandler")
+  cashHandledSales     Sale[]         @relation("SaleCashHandler")
+  cashHandledExpenses  Expense[]      @relation("ExpenseCashHandler")
   workers      Worker[]
   workerPayments WorkerPayment[]
   inventoryItems InventoryItem[]
@@ -205,14 +209,19 @@ model GoatPurchase {
   paymentStatus String
   notes         String?
   goat          Goat?     @relation(fields: [goatId], references: [id], onDelete: SetNull)
+  /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
+  /// User who paid cash (money out)
+  cashHandlerId String?
+  cashHandler   User?     @relation("GoatPurchaseCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
   deletedBy     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([ownerId])
+  @@index([cashHandlerId])
   @@index([tagNumber])
   @@index([deletedAt])
   @@index([deletedAt, ownerId])
@@ -229,14 +238,19 @@ model Sale {
   paymentStatus String
   paymentMethod String
   notes         String?
+  /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
+  /// User who received cash (money in)
+  cashHandlerId String?
+  cashHandler   User?     @relation("SaleCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
   deletedBy     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([ownerId])
+  @@index([cashHandlerId])
   @@index([tagNumber])
   @@index([goatId])
   @@index([deletedAt])
@@ -251,14 +265,19 @@ model Expense {
   amount        Decimal
   paymentMethod String
   notes         String?
+  /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
+  /// User who paid cash (money out)
+  cashHandlerId String?
+  cashHandler   User?     @relation("ExpenseCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
   deletedBy     String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([ownerId])
+  @@index([cashHandlerId])
   @@index([category])
   @@index([deletedAt])
   @@index([deletedAt, ownerId])

@@ -19,8 +19,10 @@ export const createSaleSchema = z.object({
   paymentStatus,
   paymentMethod,
   notes: z.string().max(2000).optional().nullable(),
-  /** User who received the money */
+  /** @deprecated use cashHandlerId — kept for older clients */
   ownerId: z.string().min(1).optional().nullable(),
+  /** User who received the money (not Super Admin) */
+  cashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export const updateSaleSchema = createSaleSchema.partial();

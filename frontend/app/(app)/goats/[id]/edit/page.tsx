@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { goatsService } from '@/services/goats';
+import {
+  financeUsersService,
+  type FinanceUserOption,
+} from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -16,10 +20,12 @@ import {
   ViewOnlyBanner,
   ImageUpload,
   Modal,
+  LoadingState,
 } from '@/components/ui';
 import type { Goat, VaccinationStatus } from '@/types/farm';
 import { GOAT_STATUS_OPTIONS, normalizeGoatStatus } from '@/lib/goatStatus';
 import type { PaymentMethod } from '@/types/farm';
+import { ageMonthsFromDob, dobFromAgeMonths } from '@/lib/format';
 
 type PendingPayload = {
   tagNumber: string;
@@ -38,7 +44,7 @@ type PendingPayload = {
 export default function EditGoatPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { canModifyRecord } = useAuth();
+  const { canModifyRecord, currentUser } = useAuth();
   const { toast } = useToast();
   const [goat, setGoat] = useState<Goat | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -46,19 +52,49 @@ export default function EditGoatPage() {
   const [saleOpen, setSaleOpen] = useState(false);
   const [pending, setPending] = useState<PendingPayload | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
+  const [saleCashHandlerId, setSaleCashHandlerId] = useState(currentUser.id);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     void goatsService.getById(id).then((g) => {
+      if (cancelled) return;
       if (!g) {
         setGoat(null);
+        setLoading(false);
         return;
       }
       const normalized = { ...g, status: normalizeGoatStatus(g.status) as Goat['status'] };
       setGoat(normalized);
       setImageUrl(g.imageUrl ?? null);
       setStatus(normalizeGoatStatus(g.status));
+      setLoading(false);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
+
+  useEffect(() => {
+    void financeUsersService
+      .getOptions()
+      .then((options) => {
+        if (!options.length) return;
+        setPartners(options);
+        setSaleCashHandlerId((prev) =>
+          options.some((o) => o.id === prev) ? prev : options[0].id
+        );
+      })
+      .catch(() => {
+        /* keep empty — sale form still works with current user if listed */
+      });
+  }, []);
+
+  if (loading) {
+    return <LoadingState label="Loading animal…" />;
+  }
 
   if (!goat) {
     return <p className="text-sm text-muted-fg">Goat not found.</p>;
@@ -75,6 +111,7 @@ export default function EditGoatPage() {
       salePaymentMethod: string;
       salePaymentStatus: string;
       saleDate: string;
+      saleCashHandlerId: string;
     }
   ) => {
     setSaving(true);
@@ -106,11 +143,16 @@ export default function EditGoatPage() {
     if (!canEdit) return;
     const fd = new FormData(e.currentTarget);
     const nextStatus = String(fd.get('status') || status);
+    const ageMonths = Number(fd.get('ageMonths'));
+    if (!(ageMonths >= 0) || Number.isNaN(ageMonths)) {
+      toast('Enter a valid age in months', 'error');
+      return;
+    }
     const payload: PendingPayload = {
       tagNumber: String(fd.get('tagNumber') ?? '').trim(),
       breed: String(fd.get('breed') ?? '').trim(),
       gender: String(fd.get('gender')) as 'Male' | 'Female',
-      dateOfBirth: String(fd.get('dateOfBirth')),
+      dateOfBirth: dobFromAgeMonths(ageMonths),
       weight: Number(fd.get('weight')),
       color: String(fd.get('color') ?? '').trim(),
       currentValue: Number(fd.get('currentValue')),
@@ -144,6 +186,7 @@ export default function EditGoatPage() {
       salePaymentMethod: String(fd.get('salePaymentMethod') || 'Cash'),
       salePaymentStatus: String(fd.get('salePaymentStatus') || 'Paid'),
       saleDate: String(fd.get('saleDate') || new Date().toISOString().slice(0, 10)),
+      saleCashHandlerId: String(fd.get('saleCashHandlerId') || saleCashHandlerId),
     });
   };
 
@@ -182,12 +225,15 @@ export default function EditGoatPage() {
             ]}
           />
           <Input
-            name="dateOfBirth"
-            label="Date of Birth"
-            type="date"
-            defaultValue={goat.dateOfBirth.slice(0, 10)}
+            name="ageMonths"
+            label="Age (months)"
+            type="number"
+            step="0.1"
+            min={0}
+            defaultValue={ageMonthsFromDob(goat.dateOfBirth)}
             required
             disabled={!canEdit}
+            placeholder="e.g. 12.5"
           />
           <Input
             name="weight"
@@ -256,8 +302,8 @@ export default function EditGoatPage() {
               </Button>
             </Link>
             {canEdit && (
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : 'Save'}
+              <Button type="submit" loading={saving}>
+                Save
               </Button>
             )}
           </div>
@@ -312,6 +358,19 @@ export default function EditGoatPage() {
               ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
             ).map((m) => ({ label: m, value: m }))}
           />
+          <Select
+            name="saleCashHandlerId"
+            label="Amount received by"
+            required
+            options={
+              partners.length
+                ? partners.map((p) => ({ label: p.name, value: p.id }))
+                : [{ label: currentUser.name, value: currentUser.id }]
+            }
+            value={saleCashHandlerId}
+            onChange={(e) => setSaleCashHandlerId(e.target.value)}
+          />
+          <Input label="Record added by" value={currentUser.name} disabled />
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
@@ -324,8 +383,8 @@ export default function EditGoatPage() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Confirm sale'}
+            <Button type="submit" loading={saving}>
+              Confirm sale
             </Button>
           </div>
         </form>

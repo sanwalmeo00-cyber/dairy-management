@@ -9,7 +9,9 @@ export type GoatPurchaseInput = {
   purchasePrice: number;
   paymentStatus: string;
   notes?: string | null;
+  /** @deprecated use cashHandlerId */
   ownerId?: string | null;
+  cashHandlerId?: string | null;
 };
 
 export type SaleInput = {
@@ -20,7 +22,9 @@ export type SaleInput = {
   paymentStatus: string;
   paymentMethod: string;
   notes?: string | null;
+  /** @deprecated use cashHandlerId */
   ownerId?: string | null;
+  cashHandlerId?: string | null;
 };
 
 export type ExpenseInput = {
@@ -30,7 +34,9 @@ export type ExpenseInput = {
   amount: number;
   paymentMethod: string;
   notes?: string | null;
+  /** @deprecated use cashHandlerId */
   ownerId?: string | null;
+  cashHandlerId?: string | null;
 };
 
 export type FinanceUserOption = { id: string; name: string };

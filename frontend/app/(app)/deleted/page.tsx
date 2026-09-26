@@ -15,9 +15,12 @@ import {
   EmptyState,
   OwnerBadge,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import type { DeletedRecord } from '@/types/farm';
+import { usePagedList } from '@/lib/usePagedList';
 
 const entityLabels: Record<RestorableEntity, string> = {
   goat: 'Goat',
@@ -81,6 +84,11 @@ export default function DeletedPage() {
     });
   }, [rows, search, entity]);
 
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    visible,
+    `${search}|${entity}`
+  );
+
   const pending = rows.find((d) => d.id === restoreId);
 
   const confirmRestore = async () => {
@@ -129,58 +137,65 @@ export default function DeletedPage() {
         />
       </div>
 
-      <Table
-        data={visible}
-        rowKey={(d) => d.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No deleted records'}
-            description="When you delete something, it appears here tagged as deleted."
+      {loading ? (
+        <LoadingState label="Loading deleted records…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(d) => d.id}
+            empty={
+              <EmptyState
+                title="No deleted records"
+                description="When you delete something, it appears here tagged as deleted."
+              />
+            }
+            columns={[
+              {
+                key: 'tag',
+                header: 'Tag',
+                render: () => <Badge tone="danger">Deleted</Badge>,
+              },
+              {
+                key: 'type',
+                header: 'Type',
+                render: (d) => entityLabels[d.entity as RestorableEntity] ?? d.entity,
+              },
+              { key: 'label', header: 'Record', render: (d) => d.label },
+              {
+                key: 'owner',
+                header: 'Owner',
+                render: (d) => <OwnerBadge name={d.ownerName} isOwn={isOwnerOf(d.ownerId)} />,
+              },
+              {
+                key: 'by',
+                header: 'Deleted by',
+                render: (d) => d.deletedByName,
+              },
+              {
+                key: 'at',
+                header: 'Deleted at',
+                render: (d) => formatDate(d.deletedAt),
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (d) => {
+                  const canRestore = isSuperAdmin || d.ownerId === currentUser.id;
+                  if (!canRestore) return null;
+                  return (
+                    <Button variant="outline" size="sm" onClick={() => setRestoreId(d.id)}>
+                      Restore
+                    </Button>
+                  );
+                },
+              },
+            ]}
           />
-        }
-        columns={[
-          {
-            key: 'tag',
-            header: 'Tag',
-            render: () => <Badge tone="danger">Deleted</Badge>,
-          },
-          {
-            key: 'type',
-            header: 'Type',
-            render: (d) => entityLabels[d.entity as RestorableEntity] ?? d.entity,
-          },
-          { key: 'label', header: 'Record', render: (d) => d.label },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (d) => <OwnerBadge name={d.ownerName} isOwn={isOwnerOf(d.ownerId)} />,
-          },
-          {
-            key: 'by',
-            header: 'Deleted by',
-            render: (d) => d.deletedByName,
-          },
-          {
-            key: 'at',
-            header: 'Deleted at',
-            render: (d) => formatDate(d.deletedAt),
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (d) => {
-              const canRestore = isSuperAdmin || d.ownerId === currentUser.id;
-              if (!canRestore) return null;
-              return (
-                <Button variant="outline" size="sm" onClick={() => setRestoreId(d.id)}>
-                  Restore
-                </Button>
-              );
-            },
-          },
-        ]}
-      />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!restoreId}

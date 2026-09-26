@@ -25,6 +25,9 @@ export type GoatInput = {
   salePaymentMethod?: string;
   salePaymentStatus?: string;
   saleDate?: string;
+  saleCashHandlerId?: string | null;
+  /** User who paid when animal was purchased */
+  purchaseCashHandlerId?: string | null;
 };
 
 export const goatsService = {

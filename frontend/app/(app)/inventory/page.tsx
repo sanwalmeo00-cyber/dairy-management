@@ -19,8 +19,11 @@ import {
   EmptyState,
   StatCard,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function InventoryPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
@@ -56,6 +59,11 @@ export default function InventoryPage() {
       return i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q);
     });
   }, [rows, search, category]);
+
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${category}`
+  );
 
   const lowCount = rows.filter((i) => i.currentStock > 0 && i.currentStock < i.minimumStock).length;
   const outCount = rows.filter((i) => i.currentStock <= 0).length;
@@ -139,76 +147,83 @@ export default function InventoryPage() {
         />
       </div>
 
-      <Table
-        data={filtered}
-        rowKey={(i) => i.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No inventory items'}
-            description="Add feed, medicine, or supplies to track stock."
-            actionLabel="Add Item"
-            actionHref="/inventory/new"
+      {loading ? (
+        <LoadingState label="Loading inventory…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(i) => i.id}
+            empty={
+              <EmptyState
+                title="No inventory items"
+                description="Add feed, medicine, or supplies to track stock."
+                actionLabel="Add Item"
+                actionHref="/inventory/new"
+              />
+            }
+            columns={[
+              { key: 'name', header: 'Item', render: (i) => i.name },
+              { key: 'cat', header: 'Category', render: (i) => i.category },
+              {
+                key: 'stock',
+                header: 'Stock',
+                render: (i) => `${i.currentStock} ${i.unit}`,
+              },
+              {
+                key: 'days',
+                header: 'Days left',
+                render: (i) => (i.daysLeft != null ? `~${i.daysLeft}` : '—'),
+              },
+              {
+                key: 'expiry',
+                header: 'Expiry',
+                render: (i) =>
+                  i.expiryDate ? (
+                    <span className="inline-flex flex-col gap-0.5">
+                      <span>{formatDate(i.expiryDate)}</span>
+                      {i.expiryStatus && i.expiryStatus !== 'Ok' && (
+                        <Badge tone={statusTone(i.expiryStatus)}>{i.expiryStatus}</Badge>
+                      )}
+                    </span>
+                  ) : (
+                    '—'
+                  ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (i) => <Badge tone={statusTone(i.status)}>{i.status}</Badge>,
+              },
+              {
+                key: 'owner',
+                header: 'Owner',
+                render: (i) => <OwnerBadge name={i.ownerName} isOwn={isOwnerOf(i.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (i) => (
+                  <div className="flex justify-end gap-1">
+                    <Link href={`/inventory/${i.id}`}>
+                      <Button variant="ghost" size="sm">
+                        View
+                      </Button>
+                    </Link>
+                    {canModifyRecord(i.ownerId) && (
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
           />
-        }
-        columns={[
-          { key: 'name', header: 'Item', render: (i) => i.name },
-          { key: 'cat', header: 'Category', render: (i) => i.category },
-          {
-            key: 'stock',
-            header: 'Stock',
-            render: (i) => `${i.currentStock} ${i.unit}`,
-          },
-          {
-            key: 'days',
-            header: 'Days left',
-            render: (i) => (i.daysLeft != null ? `~${i.daysLeft}` : '—'),
-          },
-          {
-            key: 'expiry',
-            header: 'Expiry',
-            render: (i) =>
-              i.expiryDate ? (
-                <span className="inline-flex flex-col gap-0.5">
-                  <span>{formatDate(i.expiryDate)}</span>
-                  {i.expiryStatus && i.expiryStatus !== 'Ok' && (
-                    <Badge tone={statusTone(i.expiryStatus)}>{i.expiryStatus}</Badge>
-                  )}
-                </span>
-              ) : (
-                '—'
-              ),
-          },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (i) => <Badge tone={statusTone(i.status)}>{i.status}</Badge>,
-          },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (i) => <OwnerBadge name={i.ownerName} isOwn={isOwnerOf(i.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (i) => (
-              <div className="flex justify-end gap-1">
-                <Link href={`/inventory/${i.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-                {canModifyRecord(i.ownerId) && (
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!deleteId}
