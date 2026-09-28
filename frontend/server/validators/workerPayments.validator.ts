@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { MONEY_ACCOUNTS } from '@/lib/moneyAccount';
 
 export const workerPaymentIdParamSchema = z.object({
   id: z.string().min(1),
 });
 
 const paymentType = z.enum(['Salary', 'Advance', 'Bonus', 'Other']);
+const moneyAccount = z.enum(MONEY_ACCOUNTS);
 const paymentMethod = z.enum(['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other']);
 const dateString = z
   .string()
@@ -20,7 +22,8 @@ export const createWorkerPaymentSchema = z.object({
   forMonth: monthString,
   type: paymentType,
   amount: z.coerce.number().positive(),
-  paymentMethod,
+  account: moneyAccount.optional(),
+  paymentMethod: paymentMethod.optional(),
   notes: z.string().max(2000).optional().nullable(),
 });
 

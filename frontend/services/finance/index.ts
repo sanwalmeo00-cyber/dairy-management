@@ -1,30 +1,28 @@
 import { api } from '@/lib/api';
 import type { Expense, GoatPurchase, Sale } from '@/types/farm';
+import type { MoneyAccount } from '@/lib/moneyAccount';
 
 export type GoatPurchaseInput = {
   date: string;
   tagNumber: string;
   goatId?: string | null;
-  seller: string;
+  seller?: string | null;
   purchasePrice: number;
-  paymentStatus: string;
+  paymentStatus?: string;
+  account?: MoneyAccount;
   notes?: string | null;
-  /** @deprecated use cashHandlerId */
-  ownerId?: string | null;
-  cashHandlerId?: string | null;
 };
 
 export type SaleInput = {
   date: string;
-  tagNumber: string;
+  /** Optional — only for animal sales; cashbook money-in omits this */
+  tagNumber?: string | null;
   buyer: string;
   salePrice: number;
   paymentStatus: string;
-  paymentMethod: string;
+  account?: MoneyAccount;
+  paymentMethod?: string;
   notes?: string | null;
-  /** @deprecated use cashHandlerId */
-  ownerId?: string | null;
-  cashHandlerId?: string | null;
 };
 
 export type ExpenseInput = {
@@ -32,14 +30,10 @@ export type ExpenseInput = {
   description: string;
   category: string;
   amount: number;
-  paymentMethod: string;
+  account?: MoneyAccount;
+  paymentMethod?: string;
   notes?: string | null;
-  /** @deprecated use cashHandlerId */
-  ownerId?: string | null;
-  cashHandlerId?: string | null;
 };
-
-export type FinanceUserOption = { id: string; name: string };
 
 export const goatPurchasesService = {
   async getAll(): Promise<GoatPurchase[]> {
@@ -77,9 +71,19 @@ export const expensesService = {
   },
 };
 
+export type FinanceUserOption = { id: string; name: string };
+
+/** Active users excluding Super Admin — for Money from / Given to selectors */
 export const financeUsersService = {
   async getOptions(): Promise<FinanceUserOption[]> {
     return api.get<FinanceUserOption[]>('/users/finance-options');
+  },
+};
+
+export const walletService = {
+  async getBalance(): Promise<number> {
+    const data = await api.get<{ balance: number }>('/wallet');
+    return data.balance;
   },
 };
 

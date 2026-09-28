@@ -76,22 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>(seedUsers);
 
   useEffect(() => {
-    try {
-      const rawUsers = localStorage.getItem(USERS_KEY);
-      if (rawUsers) {
-        const parsed = JSON.parse(rawUsers) as User[];
-        if (Array.isArray(parsed) && parsed.length) setUsers(parsed);
-      }
-    } catch {
-      /* ignore */
-    }
-
     const auth = localStorage.getItem(AUTH_KEY) === '1';
     const rawUser = localStorage.getItem(USER_JSON_KEY);
     if (auth && rawUser) {
       try {
-        setCurrentUser(JSON.parse(rawUser) as User);
+        const user = JSON.parse(rawUser) as User;
+        setCurrentUser(user);
+        setUsers([user]);
         setIsAuthenticated(true);
+        localStorage.setItem(USERS_KEY, JSON.stringify([user]));
         return;
       } catch {
         /* fall through */
@@ -99,13 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const id = localStorage.getItem(STORAGE_KEY);
-    setCurrentUser(findSeedUser(id));
+    const seed = findSeedUser(id);
+    setCurrentUser(seed);
+    setUsers([seed]);
     setIsAuthenticated(auth);
+    localStorage.setItem(USERS_KEY, JSON.stringify([seed]));
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  }, [users]);
+    if (!isAuthenticated) return;
+    localStorage.setItem(USERS_KEY, JSON.stringify([currentUser]));
+  }, [currentUser, isAuthenticated]);
 
   const login = useCallback(async (email: string, password: string, portal: LoginPortal) => {
     try {
@@ -141,12 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(AUTH_KEY, '1');
       localStorage.setItem(PORTAL_KEY, user.role === 'SUPER_ADMIN' ? 'superuser' : portal);
 
-      setUsers((prev) => {
-        if (prev.some((u) => u.id === user.id)) {
-          return prev.map((u) => (u.id === user.id ? user : u));
-        }
-        return [...prev, user];
-      });
+      setUsers([user]);
 
       return { ok: true };
     } catch (err) {

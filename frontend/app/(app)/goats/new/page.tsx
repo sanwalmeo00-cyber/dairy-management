@@ -6,14 +6,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { goatsService } from '@/services/goats';
-import {
-  financeUsersService,
-  type FinanceUserOption,
-} from '@/services/finance';
-import { PageHeader, Card, Input, Select, Textarea, Button, ImageUpload, LoadingState } from '@/components/ui';
+import { walletService } from '@/services/finance';
+import { PageHeader, Card, Input, Select, Textarea, Button, ImageUpload } from '@/components/ui';
 import type { VaccinationStatus } from '@/types/farm';
 import { GOAT_STATUS_OPTIONS } from '@/lib/goatStatus';
-import { dobFromAgeMonths } from '@/lib/format';
+import { dobFromAgeMonths, formatCurrency } from '@/lib/format';
 
 export default function NewGoatPage() {
   const router = useRouter();
@@ -21,23 +18,14 @@ export default function NewGoatPage() {
   const { toast } = useToast();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [loadingUsers, setLoadingUsers] = useState(true);
-  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
-  const [paidById, setPaidById] = useState(currentUser.id);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    void financeUsersService
-      .getOptions()
-      .then((options) => {
-        if (!options.length) return;
-        setPartners(options);
-        setPaidById((prev) => (options.some((o) => o.id === prev) ? prev : options[0].id));
-      })
-      .catch(() => {
-        /* keep current user fallback */
-      })
-      .finally(() => setLoadingUsers(false));
+    void walletService
+      .getBalance()
+      .then(setWalletBalance)
+      .catch(() => setWalletBalance(null));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -52,15 +40,17 @@ export default function NewGoatPage() {
     const dateOfBirth = dobFromAgeMonths(ageMonths);
     const purchaseDate = String(fd.get('purchaseDate') || today);
     const currentValue = Number(fd.get('currentValue'));
-    const purchaseCashHandlerId = String(fd.get('purchaseCashHandlerId') || paidById);
 
     if (purchaseDate < dateOfBirth) {
       toast('Purchase date cannot be before the animal’s birth (from age)', 'error');
       return;
     }
 
-    if (currentValue > 0 && !purchaseCashHandlerId) {
-      toast('Select who paid the purchase amount', 'error');
+    if (currentValue > 0 && walletBalance != null && walletBalance < currentValue) {
+      toast(
+        `Not enough money in wallet for buying this animal. Wallet has ${formatCurrency(walletBalance)}, but ${formatCurrency(currentValue)} is needed. Add Money in first.`,
+        'error'
+      );
       return;
     }
 
@@ -80,11 +70,10 @@ export default function NewGoatPage() {
         status: String(fd.get('status') || 'Healthy'),
         imageUrl,
         notes: String(fd.get('notes') ?? '') || null,
-        purchaseCashHandlerId: currentValue > 0 ? purchaseCashHandlerId : null,
       });
       toast(
         currentValue > 0
-          ? `Animal saved — Rs. ${currentValue} purchase added to cashbook`
+          ? `Animal saved — Rs. ${currentValue} taken from wallet`
           : `Animal saved for ${currentUser.name}`
       );
       router.push('/goats');
@@ -93,24 +82,24 @@ export default function NewGoatPage() {
       setSaving(false);
     }
   };
-
-  if (loadingUsers) {
-    return <LoadingState label="Loading users…" />;
-  }
-
-  const userOptions = partners.length
-    ? partners.map((p) => ({ label: p.name, value: p.id }))
-    : [{ label: currentUser.name, value: currentUser.id }];
-
   return (
     <div>
       <PageHeader
         title="Add Animal"
-        description={`New record will be added by ${currentUser.name}.`}
+        description={
+          walletBalance != null
+            ? `Added by ${currentUser.name}. Wallet: ${formatCurrency(walletBalance)} — purchase price is taken from the wallet.`
+            : `New record will be added by ${currentUser.name}.`
+        }
       />
 
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+          {walletBalance != null && walletBalance <= 0 && (
+            <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              Wallet is empty. Add Money in on the cashbook before buying an animal with a purchase price.
+            </p>
+          )}
           <div className="sm:col-span-2">
             <ImageUpload folder="goats" value={imageUrl} onChange={setImageUrl} disabled={saving} />
           </div>
@@ -161,16 +150,7 @@ export default function NewGoatPage() {
             required
             disabled={saving}
             min={0}
-            hint="Saved as animal value and added to cashbook as a purchase"
-          />
-          <Select
-            name="purchaseCashHandlerId"
-            label="Amount paid by"
-            required
-            disabled={saving}
-            options={userOptions}
-            value={paidById}
-            onChange={(e) => setPaidById(e.target.value)}
+            hint="Saved as animal value and taken from the farm wallet"
           />
           <Input label="Record added by" value={currentUser.name} disabled />
           <Select

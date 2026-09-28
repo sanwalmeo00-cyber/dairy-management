@@ -1,5 +1,5 @@
 import { cn } from '@/lib/format';
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 
 interface Column<T> {
   key: string;
@@ -13,12 +13,34 @@ interface TableProps<T> {
   data: T[];
   rowKey: (row: T) => string;
   empty?: ReactNode;
+  /** Clicking a row (outside buttons/links) opens detail. */
+  onRowClick?: (row: T) => void;
 }
 
-export function Table<T>({ columns, data, rowKey, empty }: TableProps<T>) {
+function isInteractiveTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return false;
+  return Boolean(
+    target.closest('button, a, input, select, textarea, label, [data-stop-row-click]')
+  );
+}
+
+export function Table<T>({ columns, data, rowKey, empty, onRowClick }: TableProps<T>) {
   if (data.length === 0) {
     return <>{empty}</>;
   }
+
+  const clickable = Boolean(onRowClick);
+
+  const handleActivate = (row: T, e: MouseEvent | KeyboardEvent) => {
+    if (!onRowClick) return;
+    if ('key' in e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+    } else if (isInteractiveTarget(e.target)) {
+      return;
+    }
+    onRowClick(row);
+  };
 
   return (
     <>
@@ -27,7 +49,14 @@ export function Table<T>({ columns, data, rowKey, empty }: TableProps<T>) {
         {data.map((row) => (
           <div
             key={rowKey(row)}
-            className="rounded-xl border border-border bg-card p-4 shadow-sm"
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={(e) => handleActivate(row, e)}
+            onKeyDown={(e) => handleActivate(row, e)}
+            className={cn(
+              'rounded-xl border border-border bg-card p-4 shadow-sm',
+              clickable && 'cursor-pointer transition-colors hover:bg-muted/40 active:bg-muted/60'
+            )}
           >
             <dl className="space-y-2.5">
               {columns.map((col) => {
@@ -83,7 +112,14 @@ export function Table<T>({ columns, data, rowKey, empty }: TableProps<T>) {
             {data.map((row) => (
               <tr
                 key={rowKey(row)}
-                className="border-b border-border last:border-0 hover:bg-muted/40"
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={(e) => handleActivate(row, e)}
+                onKeyDown={(e) => handleActivate(row, e)}
+                className={cn(
+                  'border-b border-border last:border-0 hover:bg-muted/40',
+                  clickable && 'cursor-pointer'
+                )}
               >
                 {columns.map((col) => (
                   <td

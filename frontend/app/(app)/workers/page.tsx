@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { workersService } from '@/services/workers';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -24,6 +24,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { usePagedList } from '@/lib/usePagedList';
 
 export default function WorkersPage() {
+  const router = useRouter();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Worker[]>([]);
@@ -88,7 +89,7 @@ export default function WorkersPage() {
     <div>
       <PageHeader
         title="Workers"
-        description="Farm staff, monthly salary, and payment records."
+        description="Farm staff, salary & advances (worker cashbook). Money given also posts to the main cashbook."
         action={{ label: 'Add Worker', href: '/workers/new' }}
       />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -116,6 +117,7 @@ export default function WorkersPage() {
           <Table
             data={paged}
             rowKey={(w) => w.id}
+            onRowClick={(w) => router.push(`/workers/${w.id}`)}
             empty={
               <EmptyState title="No workers" description="Add a worker to manage payroll." />
             }
@@ -139,20 +141,12 @@ export default function WorkersPage() {
                 key: 'actions',
                 header: '',
                 className: 'text-right',
-                render: (w) => (
-                  <div className="flex justify-end gap-1">
-                    <Link href={`/workers/${w.id}`}>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </Link>
-                    {canModifyRecord(w.ownerId) && (
-                      <Button variant="danger" size="sm" onClick={() => setDeleteId(w.id)}>
-                        Delete
-                      </Button>
-                    )}
-                  </div>
-                ),
+                render: (w) =>
+                  canModifyRecord(w.ownerId) ? (
+                    <Button variant="danger" size="sm" onClick={() => setDeleteId(w.id)}>
+                      Delete
+                    </Button>
+                  ) : null,
               },
             ]}
           />

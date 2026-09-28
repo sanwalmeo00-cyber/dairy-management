@@ -5,7 +5,6 @@ import {
   createGoatPurchaseSchema,
   type CreateGoatPurchaseInput,
 } from '@/server/validators/goatPurchases.validator';
-import { resolveFinanceOwnerId } from '@/server/utils/owner';
 
 export const GET = apiRoute(async (request) => {
   requireAuth(request, [...FARM_ROLES]);
@@ -18,12 +17,8 @@ export const POST = apiRoute(async (request) => {
     createGoatPurchaseSchema,
     await readJson(request)
   );
-  const cashHandlerId = await resolveFinanceOwnerId(
-    user.userId,
-    body.cashHandlerId ?? body.ownerId
-  );
   return jsonSuccess(
-    await goatPurchasesService.create(body, user.userId, cashHandlerId),
+    await goatPurchasesService.create(body, user.userId),
     201,
     'Goat purchase created'
   );

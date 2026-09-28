@@ -2,6 +2,11 @@ import { Prisma, Role } from '@prisma/client';
 import prisma from '../database/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { CreateSaleInput, UpdateSaleInput } from '../validators/sales.validator';
+import {
+  normalizeMoneyAccount,
+  paymentMethodFromAccount,
+} from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -9,20 +14,10 @@ const ownerInclude = {
 
 type SaleRow = Prisma.SaleGetPayload<{ include: typeof ownerInclude }>;
 
-async function cashHandlerNames(ids: (string | null | undefined)[]) {
-  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
-  if (!unique.length) return new Map<string, string>();
-  const users = await prisma.user.findMany({
-    where: { id: { in: unique } },
-    select: { id: true, name: true },
-  });
-  return new Map(users.map((u) => [u.id, u.name]));
-}
-
-function serialize(row: SaleRow, handlerNames: Map<string, string>) {
-  const cashHandlerId = row.cashHandlerId ?? row.ownerId;
-  const cashHandlerName =
-    handlerNames.get(cashHandlerId) ?? row.owner.name;
+function serialize(row: SaleRow) {
+  const account = normalizeMoneyAccount(
+    (row as SaleRow & { account?: string | null }).account
+  );
   return {
     id: row.id,
     date: row.date.toISOString().slice(0, 10),
@@ -32,13 +27,12 @@ function serialize(row: SaleRow, handlerNames: Map<string, string>) {
     salePrice: Number(row.salePrice),
     paymentStatus: row.paymentStatus,
     paymentMethod: row.paymentMethod,
+    account,
     notes: row.notes ?? undefined,
     ownerId: row.ownerId,
     ownerName: row.owner.name,
     addedById: row.ownerId,
     addedByName: row.owner.name,
-    cashHandlerId,
-    cashHandlerName,
     deletedAt: row.deletedAt?.toISOString() ?? null,
     deletedBy: row.deletedBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -53,6 +47,16 @@ function assertCanModify(ownerId: string, userId: string, role: Role) {
   }
 }
 
+function resolveAccountAndMethod(input: {
+  account?: string | null;
+  paymentMethod?: string | null;
+}) {
+  const account = normalizeMoneyAccount(input.account);
+  const paymentMethod =
+    input.paymentMethod?.trim() || paymentMethodFromAccount(account);
+  return { account, paymentMethod };
+}
+
 export class SalesService {
   async findAll() {
     const rows = await prisma.sale.findMany({
@@ -60,8 +64,7 @@ export class SalesService {
       include: ownerInclude,
       orderBy: { date: 'desc' },
     });
-    const names = await cashHandlerNames(rows.map((r) => r.cashHandlerId));
-    return rows.map((row) => serialize(row, names));
+    return rows.map(serialize);
   }
 
   async findById(id: string) {
@@ -70,33 +73,27 @@ export class SalesService {
       include: ownerInclude,
     });
     if (!row) throw new NotFoundError('Sale not found');
-    const names = await cashHandlerNames([row.cashHandlerId]);
-    return serialize(row, names);
+    return serialize(row);
   }
 
-  async create(
-    input: CreateSaleInput,
-    addedById: string,
-    cashHandlerId: string,
-    goatId?: string | null
-  ) {
+  async create(input: CreateSaleInput, addedById: string, goatId?: string | null) {
+    const { account, paymentMethod } = resolveAccountAndMethod(input);
     const row = await prisma.sale.create({
       data: {
         date: new Date(input.date),
-        tagNumber: input.tagNumber.trim(),
+        tagNumber: input.tagNumber?.trim() || '—',
         goatId: goatId ?? undefined,
         buyer: input.buyer.trim(),
         salePrice: input.salePrice,
         paymentStatus: input.paymentStatus,
-        paymentMethod: input.paymentMethod,
+        paymentMethod,
         notes: input.notes ?? undefined,
         ownerId: addedById,
       },
       include: ownerInclude,
     });
-    await prisma.$executeRaw`UPDATE Sale SET cashHandlerId = ${cashHandlerId} WHERE id = ${row.id}`;
-    const names = await cashHandlerNames([cashHandlerId]);
-    return serialize({ ...row, cashHandlerId }, names);
+    await setRecordAccount(prisma, 'Sale', row.id, account);
+    return serialize({ ...row, account } as SaleRow & { account: string });
   }
 
   async update(id: string, input: UpdateSaleInput, userId: string, role: Role) {
@@ -104,25 +101,36 @@ export class SalesService {
     if (!existing) throw new NotFoundError('Sale not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const nextHandler = input.cashHandlerId ?? input.ownerId;
+    const accountPatch =
+      input.account !== undefined || input.paymentMethod !== undefined
+        ? resolveAccountAndMethod({
+            account: input.account ?? (existing as { account?: string }).account,
+            paymentMethod: input.paymentMethod,
+          })
+        : null;
+
     const row = await prisma.sale.update({
       where: { id },
       data: {
         ...(input.date !== undefined && { date: new Date(input.date) }),
-        ...(input.tagNumber !== undefined && { tagNumber: input.tagNumber.trim() }),
+        ...(input.tagNumber !== undefined && {
+          tagNumber: input.tagNumber?.trim() || '—',
+        }),
         ...(input.buyer !== undefined && { buyer: input.buyer.trim() }),
         ...(input.salePrice !== undefined && { salePrice: input.salePrice }),
         ...(input.paymentStatus !== undefined && { paymentStatus: input.paymentStatus }),
-        ...(input.paymentMethod !== undefined && { paymentMethod: input.paymentMethod }),
+        ...(accountPatch && { paymentMethod: accountPatch.paymentMethod }),
         ...(input.notes !== undefined && { notes: input.notes }),
       },
       include: ownerInclude,
     });
-    if (nextHandler) {
-      await prisma.$executeRaw`UPDATE Sale SET cashHandlerId = ${nextHandler} WHERE id = ${id}`;
+    if (accountPatch) {
+      await setRecordAccount(prisma, 'Sale', id, accountPatch.account);
     }
-    const names = await cashHandlerNames([nextHandler ?? row.cashHandlerId]);
-    return serialize({ ...row, cashHandlerId: nextHandler ?? row.cashHandlerId }, names);
+    return serialize({
+      ...row,
+      account: accountPatch?.account ?? (row as { account?: string }).account,
+    } as SaleRow & { account?: string });
   }
 
   async remove(id: string, userId: string, role: Role) {
@@ -135,8 +143,7 @@ export class SalesService {
       data: { deletedAt: new Date(), deletedBy: userId },
       include: ownerInclude,
     });
-    const names = await cashHandlerNames([row.cashHandlerId]);
-    return serialize(row, names);
+    return serialize(row);
   }
 }
 

@@ -21,9 +21,9 @@ export const createInventoryItemSchema = z.object({
   name: z.string().min(1).max(200),
   category: inventoryCategory,
   unit: z.string().min(1).max(40),
-  currentStock: z.coerce.number().nonnegative().default(0),
-  minimumStock: z.coerce.number().nonnegative(),
-  cost: z.coerce.number().nonnegative(),
+  currentStock: z.coerce.number().nonnegative().optional().default(0),
+  minimumStock: z.coerce.number().nonnegative().optional().default(0),
+  cost: z.coerce.number().nonnegative().optional().default(0),
   dailyUsage: z.coerce.number().positive().optional().nullable(),
   expiryDate: dateString.optional().nullable(),
   supplier: z.string().max(200).optional().nullable(),
@@ -35,7 +35,8 @@ export const updateInventoryItemSchema = createInventoryItemSchema.partial();
 export const stockInSchema = z.object({
   date: dateString,
   quantity: z.coerce.number().positive(),
-  cost: z.coerce.number().nonnegative().optional().nullable(),
+  /** Total purchase price for this stock-in (not unit price). */
+  cost: z.coerce.number().positive(),
   supplier: z.string().max(200).optional().nullable(),
   reason: z.string().max(200).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -44,7 +45,6 @@ export const stockInSchema = z.object({
 export const stockOutSchema = z.object({
   date: dateString,
   quantity: z.coerce.number().positive(),
-  reason: z.string().min(1).max(200),
   notes: z.string().max(2000).optional().nullable(),
 });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { inventoryService } from '@/services/inventory';
@@ -16,8 +16,11 @@ import {
   Table,
   OwnerBadge,
   LoadingState,
+  EmptyState,
+  Pagination,
 } from '@/components/ui';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDateTime } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function InventoryDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,21 +45,37 @@ export default function InventoryDetailPage() {
     })();
   }, [id, toast]);
 
+  const sorted = useMemo(() => {
+    return [...txns].sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.date).getTime();
+      const bTime = new Date(b.createdAt || b.date).getTime();
+      if (bTime !== aTime) return bTime - aTime;
+      // Same instant: stock out after stock in for same day feels wrong; keep createdAt id tiebreak
+      return (b.id || '').localeCompare(a.id || '');
+    });
+  }, [txns]);
+
+  const totalSpent = useMemo(
+    () =>
+      sorted
+        .filter((t) => t.direction === 'in' && t.cost != null)
+        .reduce((s, t) => s + (t.cost ?? 0), 0),
+    [sorted]
+  );
+
+  const { page, setPage, paged, pageSize, total } = usePagedList(sorted, sorted.length);
+
   if (loading) return <LoadingState label="Loading item…" />;
   if (!item) return <p className="text-sm text-muted-fg">Item not found.</p>;
 
   return (
     <div>
       <PageHeader title={item.name} description={item.category}>
-        <OwnerBadge name={item.ownerName} isOwn={isOwnerOf(item.ownerId)} />
-        <Link href="/inventory/stock-in">
-          <Button variant="outline">Stock In</Button>
+        <Link href={`/inventory/stock-in?item=${item.id}`}>
+          <Button>Stock In</Button>
         </Link>
-        <Link href="/inventory/stock-out">
+        <Link href={`/inventory/stock-out?item=${item.id}`}>
           <Button variant="outline">Stock Out</Button>
-        </Link>
-        <Link href="/inventory">
-          <Button variant="outline">Back</Button>
         </Link>
       </PageHeader>
 
@@ -69,52 +88,21 @@ export default function InventoryDetailPage() {
             </dd>
           </div>
           <div>
-            <dt className="text-muted-fg">Minimum</dt>
-            <dd>
-              {item.minimumStock} {item.unit}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-fg">Days left</dt>
-            <dd>
-              {item.daysLeft != null
-                ? `~${item.daysLeft} days`
-                : item.dailyUsage
-                  ? '—'
-                  : 'Set daily usage'}
-            </dd>
-          </div>
-          <div>
             <dt className="text-muted-fg">Status</dt>
             <dd>
               <Badge tone={statusTone(item.status)}>{item.status}</Badge>
             </dd>
           </div>
           <div>
-            <dt className="text-muted-fg">Unit cost</dt>
-            <dd>{formatCurrency(item.cost)}</dd>
+            <dt className="text-muted-fg">Total spent</dt>
+            <dd className="font-semibold">{formatCurrency(totalSpent)}</dd>
           </div>
           <div>
-            <dt className="text-muted-fg">Daily usage</dt>
+            <dt className="text-muted-fg">Added by</dt>
             <dd>
-              {item.dailyUsage != null ? `${item.dailyUsage} ${item.unit}/day` : '—'}
+              <OwnerBadge name={item.ownerName} isOwn={isOwnerOf(item.ownerId)} />
             </dd>
           </div>
-          <div>
-            <dt className="text-muted-fg">Expiry</dt>
-            <dd className="flex flex-wrap items-center gap-2">
-              {item.expiryDate ? formatDate(item.expiryDate) : '—'}
-              {item.expiryStatus && item.expiryStatus !== 'Ok' && (
-                <Badge tone={statusTone(item.expiryStatus)}>{item.expiryStatus}</Badge>
-              )}
-            </dd>
-          </div>
-          {item.supplier && (
-            <div>
-              <dt className="text-muted-fg">Supplier</dt>
-              <dd>{item.supplier}</dd>
-            </div>
-          )}
           {item.notes && (
             <div className="sm:col-span-2 lg:col-span-4">
               <dt className="text-muted-fg">Notes</dt>
@@ -124,24 +112,51 @@ export default function InventoryDetailPage() {
         </dl>
       </Card>
 
-      <h2 className="mb-3 text-lg font-semibold">Transaction History</h2>
+      <h2 className="mb-3 text-lg font-semibold">Stock movements</h2>
+      <p className="mb-3 text-sm text-muted-fg">
+        Stock in and stock out. Purchases also post to the cashbook as expenses.
+      </p>
       <Table
-        data={txns}
+        data={paged}
         rowKey={(t) => t.id}
-        empty={<p className="text-sm text-muted-fg">No stock movements yet.</p>}
+        empty={
+          <EmptyState
+            title="No movements yet"
+            description="Use Stock In or Stock Out to record quantity changes."
+          />
+        }
         columns={[
-          { key: 'date', header: 'Date', render: (t) => formatDate(t.date) },
+          { key: 'date', header: 'Date', render: (t) => formatDateTime(t.createdAt || t.date) },
           {
-            key: 'dir',
-            header: 'Direction',
-            render: (t) => (t.direction === 'in' ? 'Stock In' : 'Stock Out'),
+            key: 'type',
+            header: 'Type',
+            render: (t) => (
+              <Badge tone={t.direction === 'in' ? 'success' : 'warning'}>
+                {t.direction === 'in' ? 'Stock in' : 'Stock out'}
+              </Badge>
+            ),
           },
-          { key: 'qty', header: 'Quantity', render: (t) => t.quantity },
-          { key: 'reason', header: 'Reason', render: (t) => t.reason ?? '—' },
+          {
+            key: 'qty',
+            header: 'Quantity',
+            render: (t) => (
+              <span className={t.direction === 'out' ? 'text-red-700' : 'text-emerald-700'}>
+                {t.direction === 'in' ? '+' : '−'}
+                {t.quantity} {item.unit}
+              </span>
+            ),
+          },
           {
             key: 'cost',
-            header: 'Cost',
-            render: (t) => (t.cost != null ? formatCurrency(t.cost) : '—'),
+            header: 'Total paid',
+            render: (t) =>
+              t.direction === 'in' && t.cost != null ? formatCurrency(t.cost) : '—',
+          },
+          {
+            key: 'notes',
+            header: 'Notes',
+            className: 'max-w-[12rem] truncate',
+            render: (t) => t.notes?.trim() || '—',
           },
           {
             key: 'owner',
@@ -150,6 +165,7 @@ export default function InventoryDetailPage() {
           },
         ]}
       />
+      <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
     </div>
   );
 }

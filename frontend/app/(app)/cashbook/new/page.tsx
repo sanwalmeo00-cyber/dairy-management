@@ -8,92 +8,138 @@ import {
   financeUsersService,
   goatPurchasesService,
   salesService,
+  walletService,
   type FinanceUserOption,
 } from '@/services/finance';
-import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, Card, Input, Select, Textarea, Button, LoadingState } from '@/components/ui';
-import type { ExpenseCategory, PaymentMethod } from '@/types/farm';
+import { formatCurrency } from '@/lib/format';
+import type { ExpenseCategory } from '@/types/farm';
 
-type EntryType = 'sale' | 'purchase' | 'expense';
+type EntryType = 'sale' | 'cashout' | 'purchase' | 'expense';
 
 function NewCashbookEntryForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentUser } = useAuth();
   const { toast } = useToast();
 
   const initialType = (searchParams.get('type') as EntryType | null) ?? 'sale';
   const [type, setType] = useState<EntryType>(
-    ['sale', 'purchase', 'expense'].includes(initialType) ? initialType : 'sale'
+    ['sale', 'cashout', 'purchase', 'expense'].includes(initialType) ? initialType : 'sale'
   );
-  const [cashHandlerId, setCashHandlerId] = useState(currentUser.id);
-  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [moneyFromId, setMoneyFromId] = useState('');
+  const [givenToId, setGivenToId] = useState('');
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const options = await financeUsersService.getOptions();
+    void Promise.all([financeUsersService.getOptions(), walletService.getBalance()])
+      .then(([options, balance]) => {
+        setPartners(options);
+        setWalletBalance(balance);
         if (options.length) {
-          setPartners(options);
-          setCashHandlerId((prev) =>
-            options.some((o) => o.id === prev) ? prev : options[0].id
-          );
+          setMoneyFromId(options[0].id);
+          setGivenToId(options[0].id);
         }
-      } catch {
-        /* keep empty */
-      } finally {
-        setLoadingUsers(false);
-      }
-    })();
-  }, []);
+      })
+      .catch(() => {
+        toast('Failed to load form data', 'error');
+      })
+      .finally(() => setLoadingUsers(false));
+  }, [toast]);
 
-  const moneyLabel =
-    type === 'sale' ? 'Cash received by' : 'Cash paid / sent by';
+  const partnerOptions = partners.map((p) => ({ label: p.name, value: p.id }));
+  const isMoneyOut = type === 'cashout' || type === 'purchase' || type === 'expense';
+
+  const ensureWalletHas = (amount: number, label: string) => {
+    if (!(amount > 0)) {
+      toast('Enter a valid amount', 'error');
+      return false;
+    }
+    if (walletBalance < amount) {
+      toast(
+        `Not enough money in wallet for ${label}. Wallet has ${formatCurrency(walletBalance)}, but ${formatCurrency(amount)} is needed. Add Money in first.`,
+        'error'
+      );
+      return false;
+    }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (saving) return;
     const fd = new FormData(e.currentTarget);
-    const selectedHandler = String(fd.get('cashHandlerId') || cashHandlerId);
     setSaving(true);
     try {
       if (type === 'sale') {
+        const fromId = String(fd.get('buyerId') || moneyFromId);
+        const fromUser = partners.find((p) => p.id === fromId);
+        if (!fromUser) {
+          toast('Select who the money is from', 'error');
+          setSaving(false);
+          return;
+        }
         await salesService.create({
           date: String(fd.get('date')),
-          tagNumber: String(fd.get('tagNumber') ?? '').trim(),
-          buyer: String(fd.get('buyer') ?? '').trim(),
+          buyer: fromUser.name,
           salePrice: Number(fd.get('salePrice')),
-          paymentStatus: String(fd.get('paymentStatus')),
-          paymentMethod: String(fd.get('paymentMethod')),
+          paymentStatus: 'Paid',
           notes: String(fd.get('notes') ?? '') || null,
-          cashHandlerId: selectedHandler,
         });
-        toast('Sale recorded');
+        toast('Money in recorded — added to wallet');
+      } else if (type === 'cashout') {
+        const toId = String(fd.get('partnerId') || givenToId);
+        const toUser = partners.find((p) => p.id === toId);
+        if (!toUser) {
+          toast('Select who receives the cash', 'error');
+          setSaving(false);
+          return;
+        }
+        const amount = Number(fd.get('amount'));
+        if (!ensureWalletHas(amount, 'cash out to partner')) {
+          setSaving(false);
+          return;
+        }
+        await expensesService.create({
+          date: String(fd.get('date')),
+          category: 'Partner Payout',
+          description: `Cash out · ${toUser.name}`,
+          amount,
+          notes: String(fd.get('notes') ?? '') || null,
+        });
+        toast(`Cash out recorded — Rs. ${amount.toLocaleString()} taken from wallet`);
       } else if (type === 'purchase') {
+        const purchasePrice = Number(fd.get('purchasePrice'));
+        if (!ensureWalletHas(purchasePrice, 'this animal purchase')) {
+          setSaving(false);
+          return;
+        }
         await goatPurchasesService.create({
           date: String(fd.get('date')),
           tagNumber: String(fd.get('tagNumber') ?? '').trim(),
-          seller: String(fd.get('seller') ?? '').trim(),
-          purchasePrice: Number(fd.get('purchasePrice')),
-          paymentStatus: String(fd.get('paymentStatus')),
+          purchasePrice,
+          paymentStatus: 'Paid',
           notes: String(fd.get('notes') ?? '') || null,
-          cashHandlerId: selectedHandler,
         });
-        toast('Purchase recorded');
+        toast('Purchase recorded — taken from wallet');
       } else {
+        const note = String(fd.get('notes') ?? '').trim();
+        const category = String(fd.get('category'));
+        const amount = Number(fd.get('amount'));
+        if (!ensureWalletHas(amount, 'this expense')) {
+          setSaving(false);
+          return;
+        }
         await expensesService.create({
           date: String(fd.get('date')),
-          category: String(fd.get('category')),
-          description: String(fd.get('description') ?? '').trim(),
-          amount: Number(fd.get('amount')),
-          paymentMethod: String(fd.get('paymentMethod')),
-          notes: String(fd.get('notes') ?? '') || null,
-          cashHandlerId: selectedHandler,
+          category,
+          description: note || category,
+          amount,
         });
-        toast('Expense recorded');
+        toast('Expense recorded — taken from wallet');
       }
       router.push('/cashbook');
     } catch (err) {
@@ -110,40 +156,27 @@ function NewCashbookEntryForm() {
     <div>
       <PageHeader
         title="New Cashbook Entry"
-        description="Choose who handled the cash. Record added by is always you."
+        description={`Wallet balance: ${formatCurrency(walletBalance)}. Money in adds to the wallet; cash out, purchases, and expenses require enough balance.`}
       />
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+          {isMoneyOut && walletBalance <= 0 && (
+            <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+              Wallet is empty. Add Money in before cash out, purchase, or expense.
+            </p>
+          )}
           <Select
             label="Entry type"
             required
             disabled={saving}
             options={[
-              { label: 'Sale (money in)', value: 'sale' },
+              { label: 'Money in (partner invests)', value: 'sale' },
+              { label: 'Cash out (given to partner)', value: 'cashout' },
               { label: 'Animal purchase (money out)', value: 'purchase' },
               { label: 'Expense (money out)', value: 'expense' },
             ]}
             value={type}
             onChange={(e) => setType(e.target.value as EntryType)}
-          />
-          <Select
-            name="cashHandlerId"
-            label={moneyLabel}
-            required
-            disabled={saving}
-            options={
-              partners.length
-                ? partners.map((p) => ({ label: p.name, value: p.id }))
-                : [{ label: currentUser.name, value: currentUser.id }]
-            }
-            value={cashHandlerId}
-            onChange={(e) => setCashHandlerId(e.target.value)}
-          />
-          <Input
-            label="Record added by"
-            value={currentUser.name}
-            disabled
-            hint="Automatically set to the logged-in user"
           />
 
           <Input
@@ -157,43 +190,57 @@ function NewCashbookEntryForm() {
 
           {type === 'sale' && (
             <>
-              <Input
-                name="tagNumber"
-                label="Tag Number"
+              <Select
+                name="buyerId"
+                label="Money from"
                 required
-                placeholder="e.g. G001"
-                disabled={saving}
-              />
-              <Input
-                name="buyer"
-                label="Buyer"
-                required
+                disabled={saving || !partnerOptions.length}
+                options={partnerOptions}
+                value={moneyFromId}
+                onChange={(e) => setMoneyFromId(e.target.value)}
                 className="sm:col-span-2"
-                disabled={saving}
               />
+              {!partnerOptions.length && (
+                <p className="sm:col-span-2 text-sm text-danger">
+                  No farm users found. Create a user (not Super Admin) first.
+                </p>
+              )}
               <Input
                 name="salePrice"
-                label="Sale Price (Rs.)"
+                label="Amount (Rs.)"
                 type="number"
                 required
                 disabled={saving}
+                className="sm:col-span-2"
               />
+            </>
+          )}
+
+          {type === 'cashout' && (
+            <>
               <Select
-                name="paymentStatus"
-                label="Payment Status"
+                name="partnerId"
+                label="Given to"
                 required
-                disabled={saving}
-                options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
+                disabled={saving || !partnerOptions.length}
+                options={partnerOptions}
+                value={givenToId}
+                onChange={(e) => setGivenToId(e.target.value)}
+                className="sm:col-span-2"
               />
-              <Select
-                name="paymentMethod"
-                label="Payment Method"
+              <Input
+                name="amount"
+                label="Amount (Rs.)"
+                type="number"
                 required
+                min={1}
                 disabled={saving}
-                options={(
-                  ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
-                ).map((m) => ({ label: m, value: m }))}
+                className="sm:col-span-2"
               />
+              <p className="sm:col-span-2 text-sm text-muted-fg">
+                Example: partner invested 100k; after animal sale you return 50k — record that 50k
+                here as cash out. The rest stays in the wallet.
+              </p>
             </>
           )}
 
@@ -207,25 +254,11 @@ function NewCashbookEntryForm() {
                 disabled={saving}
               />
               <Input
-                name="seller"
-                label="Seller"
-                required
-                className="sm:col-span-2"
-                disabled={saving}
-              />
-              <Input
                 name="purchasePrice"
                 label="Purchase Price (Rs.)"
                 type="number"
                 required
                 disabled={saving}
-              />
-              <Select
-                name="paymentStatus"
-                label="Payment Status"
-                required
-                disabled={saving}
-                options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
               />
             </>
           )}
@@ -252,33 +285,23 @@ function NewCashbookEntryForm() {
                 ).map((c) => ({ label: c, value: c }))}
               />
               <Input
-                name="description"
-                label="Description"
-                required
-                className="sm:col-span-2"
-                disabled={saving}
-              />
-              <Input
                 name="amount"
                 label="Amount (Rs.)"
                 type="number"
                 required
                 disabled={saving}
               />
-              <Select
-                name="paymentMethod"
-                label="Payment Method"
-                required
-                disabled={saving}
-                options={(
-                  ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
-                ).map((m) => ({ label: m, value: m }))}
-              />
             </>
           )}
 
           <div className="sm:col-span-2">
-            <Textarea name="notes" label="Notes" rows={3} disabled={saving} />
+            <Textarea
+              name="notes"
+              label="Notes"
+              rows={3}
+              disabled={saving}
+              required={type === 'expense'}
+            />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <Link href="/cashbook">
@@ -286,7 +309,7 @@ function NewCashbookEntryForm() {
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" loading={saving}>
+            <Button type="submit" loading={saving} disabled={!partnerOptions.length && (type === 'sale' || type === 'cashout')}>
               Save
             </Button>
           </div>

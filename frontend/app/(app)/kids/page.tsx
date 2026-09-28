@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { kidsService } from '@/services/kids';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
@@ -25,6 +26,7 @@ import { formatDate } from '@/lib/format';
 import { usePagedList } from '@/lib/usePagedList';
 
 export default function KidsPage() {
+  const router = useRouter();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Kid[]>([]);
@@ -134,6 +136,7 @@ export default function KidsPage() {
           <Table
             data={paged}
             rowKey={(k) => k.id}
+            onRowClick={(k) => router.push(`/kids/${k.id}`)}
             empty={
               <EmptyState
                 title="No kids found"
@@ -175,11 +178,6 @@ export default function KidsPage() {
                 className: 'text-right',
                 render: (k) => (
                   <div className="flex justify-end gap-1">
-                    <Link href={`/kids/${k.id}`}>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </Link>
                     {k.goatId && (
                       <Link href={`/goats/${k.goatId}`}>
                         <Button variant="outline" size="sm">

@@ -7,7 +7,12 @@ import {
   healthFromGoatStatus,
   normalizeGoatStatus,
 } from '@/lib/goatStatus';
-import { resolveFinanceOwnerId } from '../utils/owner';
+import {
+  normalizeMoneyAccount,
+  paymentMethodFromAccount,
+} from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
+import { assertWalletCanSpend } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -111,13 +116,10 @@ export class GoatsService {
       throw new ValidationError('Purchase date cannot be before date of birth');
     }
 
-    const cashHandlerId = await resolveFinanceOwnerId(
-      ownerId,
-      input.purchaseCashHandlerId
-    );
+    const cashAccount = normalizeMoneyAccount(input.purchaseAccount);
 
-    if (purchaseAmount > 0 && !cashHandlerId) {
-      throw new ValidationError('Select who paid the purchase amount');
+    if (purchaseAmount > 0) {
+      await assertWalletCanSpend(purchaseAmount, 'buying this animal');
     }
 
     const goat = await prisma.$transaction(async (tx) => {
@@ -158,7 +160,7 @@ export class GoatsService {
             ownerId,
           },
         });
-        await tx.$executeRaw`UPDATE GoatPurchase SET cashHandlerId = ${cashHandlerId} WHERE id = ${purchase.id}`;
+        await setRecordAccount(tx, 'GoatPurchase', purchase.id, cashAccount);
       }
 
       return created;
@@ -195,8 +197,11 @@ export class GoatsService {
         ? healthFromGoatStatus(nextStatus, existing.healthStatus)
         : undefined);
 
-    const saleCashHandlerId = becomingSold
-      ? await resolveFinanceOwnerId(userId, input.saleCashHandlerId)
+    const saleAccount = becomingSold
+      ? normalizeMoneyAccount(input.saleAccount)
+      : null;
+    const salePaymentMethod = saleAccount
+      ? paymentMethodFromAccount(saleAccount)
       : null;
 
     const goat = await prisma.$transaction(async (tx) => {
@@ -209,12 +214,12 @@ export class GoatsService {
             buyer: (input.saleBuyer ?? 'Walk-in buyer').trim(),
             salePrice: input.salePrice!,
             paymentStatus: input.salePaymentStatus ?? 'Paid',
-            paymentMethod: input.salePaymentMethod ?? 'Cash',
+            paymentMethod: salePaymentMethod!,
             notes: SALE_STATUS_NOTE,
             ownerId: userId,
           },
         });
-        await tx.$executeRaw`UPDATE Sale SET cashHandlerId = ${saleCashHandlerId!} WHERE id = ${sale.id}`;
+        await setRecordAccount(tx, 'Sale', sale.id, saleAccount!);
       }
 
       if (leavingSold) {

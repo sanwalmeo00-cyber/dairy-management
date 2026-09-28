@@ -26,6 +26,6 @@ export const POST = apiRoute(async (request) => {
   return jsonSuccess(
     await workerPaymentsService.create(body, user.userId),
     201,
-    'Worker payment recorded'
+    'Worker payment recorded — added to cashbook'
   );
 });

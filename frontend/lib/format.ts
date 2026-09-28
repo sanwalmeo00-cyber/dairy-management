@@ -23,6 +23,17 @@ export function formatDate(value: string | Date): string {
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/** Date + time for lists that need chronological order clarity. */
+export function formatDateTime(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return '—';
+  const h = date.getHours();
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const hour12 = h % 12 || 12;
+  const ampm = h < 12 ? 'am' : 'pm';
+  return `${formatDate(date)} · ${hour12}:${m} ${ampm}`;
+}
+
 const MS_PER_MONTH = (365.25 / 12) * 24 * 60 * 60 * 1000;
 
 /** Age in months (1 decimal) from date of birth. */

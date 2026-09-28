@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GOAT_STATUSES } from '@/lib/goatStatus';
+import { MONEY_ACCOUNTS } from '@/lib/moneyAccount';
 
 export const goatIdParamSchema = z.object({
   id: z.string().min(1),
@@ -11,7 +12,7 @@ const goatStatus = z.enum([...GOAT_STATUSES, 'Active']);
 const healthStatus = z.enum(['Healthy', 'Sick', 'Under Treatment', 'Recovering']);
 const vaccinationStatus = z.enum(['Up to Date', 'Due', 'Overdue', 'Not Vaccinated']);
 const paymentStatus = z.enum(['Paid', 'Unpaid', 'Partial']);
-const paymentMethod = z.enum(['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other']);
+const moneyAccount = z.enum(MONEY_ACCOUNTS);
 
 const dateString = z
   .string()
@@ -36,19 +37,17 @@ export const createGoatSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   fatherId: z.string().min(1).optional().nullable(),
   motherId: z.string().min(1).optional().nullable(),
-  /** User who paid purchase cash (not Super Admin) */
-  purchaseCashHandlerId: z.string().min(1).optional().nullable(),
+  /** Wallet used to pay for the animal */
+  purchaseAccount: moneyAccount.optional(),
 });
 
 export const updateGoatSchema = createGoatSchema.partial().extend({
   /** Required when changing status to Sold */
   salePrice: z.coerce.number().positive().optional(),
   saleBuyer: z.string().min(1).max(200).optional(),
-  salePaymentMethod: paymentMethod.optional(),
+  saleAccount: moneyAccount.optional(),
   salePaymentStatus: paymentStatus.optional(),
   saleDate: dateString.optional(),
-  /** User who received sale cash (not Super Admin) */
-  saleCashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export type CreateGoatInput = z.infer<typeof createGoatSchema>;

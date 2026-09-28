@@ -5,10 +5,36 @@ import {
   CreateWorkerPaymentInput,
   UpdateWorkerPaymentInput,
 } from '../validators/workerPayments.validator';
+import {
+  normalizeMoneyAccount,
+  paymentMethodFromAccount,
+} from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
+import { assertWalletCanSpend } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
 } as const;
+
+/** Marker in Expense.notes so we can find/soft-delete the linked cashbook row. */
+export const WORKER_PAYMENT_EXPENSE_PREFIX = 'Auto from worker payment:';
+
+function expenseNoteFor(paymentId: string, userNotes?: string | null) {
+  const marker = `${WORKER_PAYMENT_EXPENSE_PREFIX}${paymentId}`;
+  const extra = userNotes?.trim();
+  return extra ? `${marker}\n${extra}` : marker;
+}
+
+function expenseDescription(workerName: string, forMonth: string) {
+  return `Worker payment · ${workerName} (${forMonth})`;
+}
+
+function resolvePayMethod(input: { account?: string | null; paymentMethod?: string | null }) {
+  const account = normalizeMoneyAccount(input.account);
+  const paymentMethod =
+    input.paymentMethod?.trim() || paymentMethodFromAccount(account);
+  return { account, paymentMethod };
+}
 
 function serialize(
   row: Prisma.WorkerPaymentGetPayload<{ include: typeof ownerInclude }>
@@ -67,19 +93,41 @@ export class WorkerPaymentsService {
     });
     if (!worker) throw new NotFoundError('Worker not found');
 
-    const row = await prisma.workerPayment.create({
-      data: {
-        workerId: input.workerId,
-        date: new Date(input.date),
-        forMonth: input.forMonth,
-        type: input.type,
-        amount: input.amount,
-        paymentMethod: input.paymentMethod,
-        notes: input.notes ?? undefined,
-        ownerId,
-      },
-      include: ownerInclude,
+    const { account, paymentMethod } = resolvePayMethod(input);
+
+    await assertWalletCanSpend(input.amount, 'paying this worker');
+
+    const row = await prisma.$transaction(async (tx) => {
+      const payment = await tx.workerPayment.create({
+        data: {
+          workerId: input.workerId,
+          date: new Date(input.date),
+          forMonth: input.forMonth,
+          type: input.type,
+          amount: input.amount,
+          paymentMethod,
+          notes: input.notes ?? undefined,
+          ownerId,
+        },
+        include: ownerInclude,
+      });
+
+      const expense = await tx.expense.create({
+        data: {
+          date: new Date(input.date),
+          description: expenseDescription(worker.name, input.forMonth),
+          category: 'Worker Salary',
+          amount: input.amount,
+          paymentMethod,
+          notes: expenseNoteFor(payment.id, input.notes),
+          ownerId,
+        },
+      });
+      await setRecordAccount(tx, 'Expense', expense.id, account);
+
+      return payment;
     });
+
     return serialize(row);
   }
 
@@ -90,26 +138,72 @@ export class WorkerPaymentsService {
     if (!existing) throw new NotFoundError('Worker payment not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    if (input.workerId) {
+    let workerName: string | undefined;
+    const workerId = input.workerId ?? existing.workerId;
+    if (input.workerId || input.type || input.forMonth) {
       const worker = await prisma.worker.findFirst({
-        where: { id: input.workerId, deletedAt: null },
+        where: { id: workerId, deletedAt: null },
       });
       if (!worker) throw new NotFoundError('Worker not found');
+      workerName = worker.name;
     }
 
-    const row = await prisma.workerPayment.update({
-      where: { id },
-      data: {
-        ...(input.workerId !== undefined && { workerId: input.workerId }),
-        ...(input.date !== undefined && { date: new Date(input.date) }),
-        ...(input.forMonth !== undefined && { forMonth: input.forMonth }),
-        ...(input.type !== undefined && { type: input.type }),
-        ...(input.amount !== undefined && { amount: input.amount }),
-        ...(input.paymentMethod !== undefined && { paymentMethod: input.paymentMethod }),
-        ...(input.notes !== undefined && { notes: input.notes }),
-      },
-      include: ownerInclude,
+    const payPatch =
+      input.account !== undefined || input.paymentMethod !== undefined
+        ? resolvePayMethod({
+            account: input.account,
+            paymentMethod: input.paymentMethod ?? existing.paymentMethod,
+          })
+        : null;
+
+    const row = await prisma.$transaction(async (tx) => {
+      const payment = await tx.workerPayment.update({
+        where: { id },
+        data: {
+          ...(input.workerId !== undefined && { workerId: input.workerId }),
+          ...(input.date !== undefined && { date: new Date(input.date) }),
+          ...(input.forMonth !== undefined && { forMonth: input.forMonth }),
+          ...(input.type !== undefined && { type: input.type }),
+          ...(input.amount !== undefined && { amount: input.amount }),
+          ...(payPatch && { paymentMethod: payPatch.paymentMethod }),
+          ...(input.notes !== undefined && { notes: input.notes }),
+        },
+        include: ownerInclude,
+      });
+
+      const marker = `${WORKER_PAYMENT_EXPENSE_PREFIX}${id}`;
+      const linked = await tx.expense.findFirst({
+        where: { deletedAt: null, notes: { startsWith: marker } },
+      });
+      if (linked) {
+        const forMonth = input.forMonth ?? payment.forMonth;
+        const name =
+          workerName ??
+          (
+            await tx.worker.findFirst({
+              where: { id: payment.workerId },
+              select: { name: true },
+            })
+          )?.name ??
+          'Worker';
+        await tx.expense.update({
+          where: { id: linked.id },
+          data: {
+            ...(input.date !== undefined && { date: new Date(input.date) }),
+            description: expenseDescription(name, forMonth),
+            ...(input.amount !== undefined && { amount: input.amount }),
+            ...(payPatch && { paymentMethod: payPatch.paymentMethod }),
+            notes: expenseNoteFor(id, input.notes !== undefined ? input.notes : payment.notes),
+          },
+        });
+        if (payPatch) {
+          await setRecordAccount(tx, 'Expense', linked.id, payPatch.account);
+        }
+      }
+
+      return payment;
     });
+
     return serialize(row);
   }
 
@@ -120,11 +214,20 @@ export class WorkerPaymentsService {
     if (!existing) throw new NotFoundError('Worker payment not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.workerPayment.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
+    const row = await prisma.$transaction(async (tx) => {
+      const payment = await tx.workerPayment.update({
+        where: { id },
+        data: { deletedAt: new Date(), deletedBy: userId },
+        include: ownerInclude,
+      });
+      const marker = `${WORKER_PAYMENT_EXPENSE_PREFIX}${id}`;
+      await tx.expense.updateMany({
+        where: { deletedAt: null, notes: { startsWith: marker } },
+        data: { deletedAt: new Date(), deletedBy: userId },
+      });
+      return payment;
     });
+
     return serialize(row);
   }
 }

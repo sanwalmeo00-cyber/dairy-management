@@ -4,10 +4,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { goatsService } from '@/services/goats';
-import {
-  financeUsersService,
-  type FinanceUserOption,
-} from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import {
@@ -24,7 +20,6 @@ import {
 } from '@/components/ui';
 import type { Goat, VaccinationStatus } from '@/types/farm';
 import { GOAT_STATUS_OPTIONS, normalizeGoatStatus } from '@/lib/goatStatus';
-import type { PaymentMethod } from '@/types/farm';
 import { ageMonthsFromDob, dobFromAgeMonths } from '@/lib/format';
 
 type PendingPayload = {
@@ -53,8 +48,6 @@ export default function EditGoatPage() {
   const [pending, setPending] = useState<PendingPayload | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [partners, setPartners] = useState<FinanceUserOption[]>([]);
-  const [saleCashHandlerId, setSaleCashHandlerId] = useState(currentUser.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,21 +70,6 @@ export default function EditGoatPage() {
     };
   }, [id]);
 
-  useEffect(() => {
-    void financeUsersService
-      .getOptions()
-      .then((options) => {
-        if (!options.length) return;
-        setPartners(options);
-        setSaleCashHandlerId((prev) =>
-          options.some((o) => o.id === prev) ? prev : options[0].id
-        );
-      })
-      .catch(() => {
-        /* keep empty — sale form still works with current user if listed */
-      });
-  }, []);
-
   if (loading) {
     return <LoadingState label="Loading animal…" />;
   }
@@ -108,10 +86,8 @@ export default function EditGoatPage() {
     sale?: {
       salePrice: number;
       saleBuyer: string;
-      salePaymentMethod: string;
       salePaymentStatus: string;
       saleDate: string;
-      saleCashHandlerId: string;
     }
   ) => {
     setSaving(true);
@@ -183,10 +159,8 @@ export default function EditGoatPage() {
     await save(pending, {
       salePrice,
       saleBuyer: String(fd.get('saleBuyer') ?? '').trim() || 'Walk-in buyer',
-      salePaymentMethod: String(fd.get('salePaymentMethod') || 'Cash'),
       salePaymentStatus: String(fd.get('salePaymentStatus') || 'Paid'),
       saleDate: String(fd.get('saleDate') || new Date().toISOString().slice(0, 10)),
-      saleCashHandlerId: String(fd.get('saleCashHandlerId') || saleCashHandlerId),
     });
   };
 
@@ -348,27 +322,6 @@ export default function EditGoatPage() {
             required
             defaultValue="Paid"
             options={['Paid', 'Unpaid', 'Partial'].map((s) => ({ label: s, value: s }))}
-          />
-          <Select
-            name="salePaymentMethod"
-            label="Payment Method"
-            required
-            defaultValue="Cash"
-            options={(
-              ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other'] as PaymentMethod[]
-            ).map((m) => ({ label: m, value: m }))}
-          />
-          <Select
-            name="saleCashHandlerId"
-            label="Amount received by"
-            required
-            options={
-              partners.length
-                ? partners.map((p) => ({ label: p.name, value: p.id }))
-                : [{ label: currentUser.name, value: currentUser.id }]
-            }
-            value={saleCashHandlerId}
-            onChange={(e) => setSaleCashHandlerId(e.target.value)}
           />
           <Input label="Record added by" value={currentUser.name} disabled />
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

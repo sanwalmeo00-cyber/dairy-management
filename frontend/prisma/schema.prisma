@@ -207,12 +207,14 @@ model GoatPurchase {
   seller        String
   purchasePrice Decimal
   paymentStatus String
+  /// Business wallet: Cash in Hand | Bank Account | JazzCash | EasyPaisa | Other
+  account       String    @default("Cash in Hand")
   notes         String?
   goat          Goat?     @relation(fields: [goatId], references: [id], onDelete: SetNull)
   /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
-  /// User who paid cash (money out)
+  /// @deprecated — kept for old rows; UI no longer uses who paid/received
   cashHandlerId String?
   cashHandler   User?     @relation("GoatPurchaseCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
@@ -222,6 +224,7 @@ model GoatPurchase {
 
   @@index([ownerId])
   @@index([cashHandlerId])
+  @@index([account])
   @@index([tagNumber])
   @@index([deletedAt])
   @@index([deletedAt, ownerId])
@@ -237,11 +240,13 @@ model Sale {
   salePrice     Decimal
   paymentStatus String
   paymentMethod String
+  /// Business wallet: Cash in Hand | Bank Account | JazzCash | EasyPaisa | Other
+  account       String    @default("Cash in Hand")
   notes         String?
   /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
-  /// User who received cash (money in)
+  /// @deprecated — kept for old rows; UI no longer uses who paid/received
   cashHandlerId String?
   cashHandler   User?     @relation("SaleCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
@@ -251,6 +256,7 @@ model Sale {
 
   @@index([ownerId])
   @@index([cashHandlerId])
+  @@index([account])
   @@index([tagNumber])
   @@index([goatId])
   @@index([deletedAt])
@@ -264,11 +270,13 @@ model Expense {
   category      String
   amount        Decimal
   paymentMethod String
+  /// Business wallet: Cash in Hand | Bank Account | JazzCash | EasyPaisa | Other
+  account       String    @default("Cash in Hand")
   notes         String?
   /// User who added this cashbook record
   ownerId       String
   owner         User      @relation(fields: [ownerId], references: [id])
-  /// User who paid cash (money out)
+  /// @deprecated — kept for old rows; UI no longer uses who paid/received
   cashHandlerId String?
   cashHandler   User?     @relation("ExpenseCashHandler", fields: [cashHandlerId], references: [id])
   deletedAt     DateTime?
@@ -278,6 +286,7 @@ model Expense {
 
   @@index([ownerId])
   @@index([cashHandlerId])
+  @@index([account])
   @@index([category])
   @@index([deletedAt])
   @@index([deletedAt, ownerId])

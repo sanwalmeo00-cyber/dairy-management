@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -25,6 +26,7 @@ import { formatCurrency, formatAgeMonths } from '@/lib/format';
 const PAGE_SIZE = 10;
 
 export default function GoatsPage() {
+  const router = useRouter();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Goat[]>([]);
@@ -145,6 +147,7 @@ export default function GoatsPage() {
           <Table
             data={paged}
             rowKey={(g) => g.id}
+            onRowClick={(g) => router.push(`/goats/${g.id}`)}
             empty={
               <EmptyState
                 title="No animals found"
@@ -185,27 +188,19 @@ export default function GoatsPage() {
                 key: 'actions',
                 header: '',
                 className: 'text-right',
-                render: (g) => (
-                  <div className="flex justify-end gap-1">
-                    <Link href={`/goats/${g.id}`}>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </Link>
-                    {canModifyRecord(g.ownerId) && (
-                      <>
-                        <Link href={`/goats/${g.id}/edit`}>
-                          <Button variant="outline" size="sm">
-                            Edit
-                          </Button>
-                        </Link>
-                        <Button variant="danger" size="sm" onClick={() => setDeleteId(g.id)}>
-                          Delete
+                render: (g) =>
+                  canModifyRecord(g.ownerId) ? (
+                    <div className="flex justify-end gap-1">
+                      <Link href={`/goats/${g.id}/edit`}>
+                        <Button variant="outline" size="sm">
+                          Edit
                         </Button>
-                      </>
-                    )}
-                  </div>
-                ),
+                      </Link>
+                      <Button variant="danger" size="sm" onClick={() => setDeleteId(g.id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  ) : null,
               },
             ]}
           />

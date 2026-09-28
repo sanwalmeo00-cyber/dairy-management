@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { MONEY_ACCOUNTS } from '@/lib/moneyAccount';
 
 export const goatPurchaseIdParamSchema = z.object({
   id: z.string().min(1),
 });
 
 const paymentStatus = z.enum(['Paid', 'Unpaid', 'Partial']);
+const moneyAccount = z.enum(MONEY_ACCOUNTS);
 const dateString = z
   .string()
   .min(1)
@@ -14,14 +16,12 @@ export const createGoatPurchaseSchema = z.object({
   date: dateString,
   tagNumber: z.string().min(1).max(64),
   goatId: z.string().min(1).optional().nullable(),
-  seller: z.string().min(1).max(200),
+  /** Optional — not collected in cashbook UI */
+  seller: z.string().max(200).optional().nullable(),
   purchasePrice: z.coerce.number().nonnegative(),
-  paymentStatus,
+  paymentStatus: paymentStatus.optional().default('Paid'),
+  account: moneyAccount.optional(),
   notes: z.string().max(2000).optional().nullable(),
-  /** @deprecated use cashHandlerId */
-  ownerId: z.string().min(1).optional().nullable(),
-  /** User who paid the money (not Super Admin) */
-  cashHandlerId: z.string().min(1).optional().nullable(),
 });
 
 export const updateGoatPurchaseSchema = createGoatPurchaseSchema.partial();

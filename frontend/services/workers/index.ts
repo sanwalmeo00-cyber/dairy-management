@@ -17,7 +17,8 @@ export type WorkerPaymentInput = {
   forMonth: string;
   type: 'Salary' | 'Advance' | 'Bonus' | 'Other';
   amount: number;
-  paymentMethod: string;
+  account?: string;
+  paymentMethod?: string;
   notes?: string | null;
 };
 

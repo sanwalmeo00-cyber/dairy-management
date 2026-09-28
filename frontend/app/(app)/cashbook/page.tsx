@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
   expensesService,
   goatPurchasesService,
@@ -17,24 +16,25 @@ import {
   Table,
   StatCard,
   Badge,
-  statusTone,
   Button,
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  Modal,
   LoadingState,
   Pagination,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { usePagedList } from '@/lib/usePagedList';
 
-export type CashbookKind = 'sale' | 'purchase' | 'expense';
+export type CashbookKind = 'sale' | 'animalsale' | 'purchase' | 'expense' | 'cashout';
 
 type CashbookEntry = {
   id: string;
   kind: CashbookKind;
   date: string;
   description: string;
+  notes?: string | null;
   party: string;
   amount: number;
   direction: 'in' | 'out';
@@ -43,9 +43,11 @@ type CashbookEntry = {
   ownerName: string;
   addedById: string;
   addedByName: string;
-  cashHandlerId: string;
-  cashHandlerName: string;
 };
+
+function isAnimalSale(r: Sale) {
+  return Boolean(r.goatId) || Boolean(r.tagNumber && r.tagNumber !== '—');
+}
 
 function toEntries(
   sales: Sale[],
@@ -53,28 +55,33 @@ function toEntries(
   expenses: Expense[]
 ): CashbookEntry[] {
   return [
-    ...sales.map((r) => ({
-      id: `sale-${r.id}`,
-      kind: 'sale' as const,
-      date: r.date,
-      description: `Sale · tag ${r.tagNumber}`,
-      party: r.buyer,
-      amount: r.salePrice,
-      direction: 'in' as const,
-      status: r.paymentStatus,
-      ownerId: r.ownerId,
-      ownerName: r.ownerName,
-      addedById: r.addedById ?? r.ownerId,
-      addedByName: r.addedByName ?? r.ownerName,
-      cashHandlerId: r.cashHandlerId ?? r.ownerId,
-      cashHandlerName: r.cashHandlerName ?? r.ownerName,
-    })),
+    ...sales.map((r) => {
+      const animal = isAnimalSale(r);
+      return {
+        id: `sale-${r.id}`,
+        kind: (animal ? 'animalsale' : 'sale') as CashbookKind,
+        date: r.date,
+        description: animal
+          ? `Animal sale · tag ${r.tagNumber}`
+          : `Money in · ${r.buyer}`,
+        notes: r.notes ?? null,
+        party: r.buyer,
+        amount: r.salePrice,
+        direction: 'in' as const,
+        status: r.paymentStatus,
+        ownerId: r.ownerId,
+        ownerName: r.ownerName,
+        addedById: r.addedById ?? r.ownerId,
+        addedByName: r.addedByName ?? r.ownerName,
+      };
+    }),
     ...purchases.map((r) => ({
       id: `purchase-${r.id}`,
       kind: 'purchase' as const,
       date: r.date,
       description: `Purchase · tag ${r.tagNumber}`,
-      party: r.seller,
+      notes: r.notes ?? null,
+      party: r.tagNumber,
       amount: r.purchasePrice,
       direction: 'out' as const,
       status: r.paymentStatus,
@@ -82,32 +89,36 @@ function toEntries(
       ownerName: r.ownerName,
       addedById: r.addedById ?? r.ownerId,
       addedByName: r.addedByName ?? r.ownerName,
-      cashHandlerId: r.cashHandlerId ?? r.ownerId,
-      cashHandlerName: r.cashHandlerName ?? r.ownerName,
     })),
-    ...expenses.map((r) => ({
-      id: `expense-${r.id}`,
-      kind: 'expense' as const,
-      date: r.date,
-      description: r.description,
-      party: r.category,
-      amount: r.amount,
-      direction: 'out' as const,
-      status: r.paymentMethod,
-      ownerId: r.ownerId,
-      ownerName: r.ownerName,
-      addedById: r.addedById ?? r.ownerId,
-      addedByName: r.addedByName ?? r.ownerName,
-      cashHandlerId: r.cashHandlerId ?? r.ownerId,
-      cashHandlerName: r.cashHandlerName ?? r.ownerName,
-    })),
+    ...expenses.map((r) => {
+      const isCashOut = r.category === 'Partner Payout';
+      return {
+        id: `expense-${r.id}`,
+        kind: (isCashOut ? 'cashout' : 'expense') as CashbookKind,
+        date: r.date,
+        description: r.description,
+        notes: r.notes ?? null,
+        party: isCashOut
+          ? r.description.replace(/^Cash out ·\s*/i, '') || r.category
+          : r.category,
+        amount: r.amount,
+        direction: 'out' as const,
+        status: r.paymentMethod,
+        ownerId: r.ownerId,
+        ownerName: r.ownerName,
+        addedById: r.addedById ?? r.ownerId,
+        addedByName: r.addedByName ?? r.ownerName,
+      };
+    }),
   ].sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description));
 }
 
 const KIND_LABEL: Record<CashbookKind, string> = {
-  sale: 'Sale',
+  sale: 'Money in',
+  animalsale: 'Animal sale',
   purchase: 'Purchase',
   expense: 'Expense',
+  cashout: 'Cash out',
 };
 
 export default function CashbookPage() {
@@ -120,6 +131,7 @@ export default function CashbookPage() {
   const [kind, setKind] = useState('');
   const [userId, setUserId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<CashbookEntry | null>(null);
+  const [detail, setDetail] = useState<CashbookEntry | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -153,7 +165,6 @@ export default function CashbookPage() {
   const userOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const e of entries) {
-      map.set(e.cashHandlerId, e.cashHandlerName);
       map.set(e.addedById, e.addedByName);
     }
     return [...map.entries()]
@@ -165,12 +176,12 @@ export default function CashbookPage() {
     const q = search.toLowerCase();
     return entries.filter((r) => {
       if (kind && r.kind !== kind) return false;
-      if (userId && r.cashHandlerId !== userId && r.addedById !== userId) return false;
+      if (userId && r.addedById !== userId) return false;
       if (!q) return true;
       return (
         r.description.toLowerCase().includes(q) ||
+        (r.notes ?? '').toLowerCase().includes(q) ||
         r.party.toLowerCase().includes(q) ||
-        r.cashHandlerName.toLowerCase().includes(q) ||
         r.addedByName.toLowerCase().includes(q) ||
         KIND_LABEL[r.kind].toLowerCase().includes(q)
       );
@@ -188,7 +199,16 @@ export default function CashbookPage() {
   const moneyOut = filtered
     .filter((r) => r.direction === 'out')
     .reduce((s, r) => s + r.amount, 0);
-  const net = moneyIn - moneyOut;
+  const wallet = moneyIn - moneyOut;
+
+  /** Profit = business income − business costs. Partner investment / cash-out are capital, not profit. */
+  const businessIncome = filtered
+    .filter((r) => r.kind === 'animalsale')
+    .reduce((s, r) => s + r.amount, 0);
+  const businessCosts = filtered
+    .filter((r) => r.kind === 'purchase' || r.kind === 'expense')
+    .reduce((s, r) => s + r.amount, 0);
+  const profit = businessIncome - businessCosts;
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -206,6 +226,7 @@ export default function CashbookPage() {
         await goatPurchasesService.remove(rawId);
         setPurchases((prev) => prev.filter((r) => r.id !== rawId));
       } else {
+        // expense + cashout both stored as Expense
         await expensesService.remove(rawId);
         setExpenses((prev) => prev.filter((r) => r.id !== rawId));
       }
@@ -220,26 +241,30 @@ export default function CashbookPage() {
     <div>
       <PageHeader
         title="Cashbook"
-        description="All sales, purchases, and expenses. Filter by type and who paid or received money."
-      >
-        <Link href="/cashbook/new?type=sale">
-          <Button variant="outline">Record Sale</Button>
-        </Link>
-        <Link href="/cashbook/new?type=purchase">
-          <Button variant="outline">Record Purchase</Button>
-        </Link>
-        <Link href="/cashbook/new?type=expense">
-          <Button>Add Expense</Button>
-        </Link>
-      </PageHeader>
+        description="Wallet = all cash in/out. Profit = animal sales − purchases & expenses (partner investment is not profit)."
+        action={{ label: 'Add record', href: '/cashbook/new' }}
+      />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatCard label="Money In" value={formatCurrency(moneyIn)} hint="Sales (filtered)" />
-        <StatCard label="Money Out" value={formatCurrency(moneyOut)} hint="Purchases & expenses" />
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label={net >= 0 ? 'Net Profit' : 'Net Loss'}
-          value={formatCurrency(Math.abs(net))}
-          hint="Based on current filters"
+          label="Money In"
+          value={formatCurrency(moneyIn)}
+          hint="Investment + animal sales → wallet"
+        />
+        <StatCard
+          label="Money Out"
+          value={formatCurrency(moneyOut)}
+          hint="Purchases, expenses, cash out"
+        />
+        <StatCard
+          label="Wallet"
+          value={formatCurrency(wallet)}
+          hint="Cash left (In − Out)"
+        />
+        <StatCard
+          label={profit >= 0 ? 'Profit' : 'Loss'}
+          value={formatCurrency(Math.abs(profit))}
+          hint="Animal sales − purchases & expenses (investment not counted)"
         />
       </div>
 
@@ -252,7 +277,9 @@ export default function CashbookPage() {
         />
         <Select
           options={[
-            { label: 'Sales', value: 'sale' },
+            { label: 'Money in', value: 'sale' },
+            { label: 'Animal sale', value: 'animalsale' },
+            { label: 'Cash out', value: 'cashout' },
             { label: 'Purchases', value: 'purchase' },
             { label: 'Expenses', value: 'expense' },
           ]}
@@ -263,7 +290,7 @@ export default function CashbookPage() {
         />
         <Select
           options={userOptions}
-          placeholder="All users"
+          placeholder="Added by"
           value={userId}
           onChange={(e) => setUserId(e.target.value)}
           className="sm:w-44"
@@ -277,6 +304,7 @@ export default function CashbookPage() {
           <Table
             data={paged}
             rowKey={(r) => r.id}
+            onRowClick={setDetail}
             empty={
               <EmptyState
                 title="No cashbook entries"
@@ -291,14 +319,29 @@ export default function CashbookPage() {
                 render: (r) => (
                   <Badge
                     tone={
-                      r.kind === 'sale' ? 'success' : r.kind === 'purchase' ? 'info' : 'warning'
+                      r.kind === 'sale' || r.kind === 'animalsale'
+                        ? 'success'
+                        : r.kind === 'cashout'
+                          ? 'danger'
+                          : r.kind === 'purchase'
+                            ? 'info'
+                            : 'warning'
                     }
                   >
                     {KIND_LABEL[r.kind]}
                   </Badge>
                 ),
               },
-              { key: 'desc', header: 'Description', render: (r) => r.description },
+              {
+                key: 'desc',
+                header: 'Description',
+                className: 'max-w-[12rem] truncate whitespace-nowrap md:max-w-[16rem]',
+                render: (r) => (
+                  <span className="block max-w-[12rem] truncate md:max-w-[16rem]" title={r.description}>
+                    {r.description}
+                  </span>
+                ),
+              },
               { key: 'party', header: 'Party', render: (r) => r.party },
               {
                 key: 'amount',
@@ -310,50 +353,106 @@ export default function CashbookPage() {
                   </span>
                 ),
               },
-          {
-            key: 'money',
-            header: 'Paid / Received by',
-            render: (r) => (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-muted-fg">
-                  {r.direction === 'in' ? 'Received' : 'Paid'}
-                </span>
-                <OwnerBadge
-                  name={r.cashHandlerName}
-                  isOwn={isOwnerOf(r.cashHandlerId)}
-                />
-              </div>
-            ),
-          },
-          {
-            key: 'addedBy',
-            header: 'Record added by',
-            render: (r) => (
-              <OwnerBadge name={r.addedByName} isOwn={isOwnerOf(r.addedById)} />
-            ),
-          },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (r) =>
-              r.status ? <Badge tone={statusTone(r.status)}>{r.status}</Badge> : '—',
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (r) =>
-              canModifyRecord(r.ownerId) ? (
-                <Button variant="danger" size="sm" onClick={() => setDeleteTarget(r)}>
-                  Delete
-                </Button>
-              ) : null,
-          },
-        ]}
-      />
+              {
+                key: 'addedBy',
+                header: 'Record added by',
+                render: (r) => (
+                  <OwnerBadge name={r.addedByName} isOwn={isOwnerOf(r.addedById)} />
+                ),
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (r) =>
+                  canModifyRecord(r.ownerId) ? (
+                    <Button variant="danger" size="sm" onClick={() => setDeleteTarget(r)}>
+                      Delete
+                    </Button>
+                  ) : null,
+              },
+            ]}
+          />
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
         </>
       )}
+
+      <Modal
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        title={detail ? KIND_LABEL[detail.kind] : 'Entry detail'}
+        footer={
+          detail && canModifyRecord(detail.ownerId) ? (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+              <Button
+                variant="danger"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  setDeleteTarget(detail);
+                  setDetail(null);
+                }}
+              >
+                Delete
+              </Button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+            </div>
+          )
+        }
+      >
+        {detail && (
+          <dl className="grid gap-3 text-sm">
+            <div>
+              <dt className="text-muted-fg">Date</dt>
+              <dd className="font-medium">{formatDate(detail.date)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-fg">Type</dt>
+              <dd className="font-medium">{KIND_LABEL[detail.kind]}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-fg">Amount</dt>
+              <dd
+                className={
+                  detail.direction === 'in'
+                    ? 'font-medium text-emerald-700'
+                    : 'font-medium text-red-700'
+                }
+              >
+                {detail.direction === 'in' ? '+' : '−'}
+                {formatCurrency(detail.amount)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-fg">Party</dt>
+              <dd className="font-medium break-words">{detail.party}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-fg">Description</dt>
+              <dd className="whitespace-pre-wrap break-words font-medium">{detail.description}</dd>
+            </div>
+            {detail.notes?.trim() ? (
+              <div>
+                <dt className="text-muted-fg">Notes</dt>
+                <dd className="whitespace-pre-wrap break-words font-medium">{detail.notes}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt className="text-muted-fg">Record added by</dt>
+              <dd className="mt-1">
+                <OwnerBadge name={detail.addedByName} isOwn={isOwnerOf(detail.addedById)} />
+              </dd>
+            </div>
+          </dl>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}
