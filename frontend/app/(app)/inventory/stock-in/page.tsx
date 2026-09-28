@@ -1,75 +1,167 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { inventoryService } from '@/services/inventory';
+import { walletService } from '@/services/finance';
 import { useToast } from '@/context/ToastContext';
-import { PageHeader, Card, Select, Input, Textarea, Button } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  Select,
+  Input,
+  Textarea,
+  Button,
+  LoadingState,
+} from '@/components/ui';
+import { formatCurrency } from '@/lib/format';
 
-export default function StockInPage() {
+function StockInForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const preselect = searchParams.get('item') ?? '';
   const [options, setOptions] = useState<{ label: string; value: string }[]>([]);
+  const [itemId, setItemId] = useState(preselect);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   useEffect(() => {
-    void inventoryService
-      .getAll()
-      .then((items) =>
-        setOptions(items.map((i) => ({ label: `${i.name} (${i.unit})`, value: i.id })))
-      )
-      .catch((err) => toast(err instanceof Error ? err.message : 'Failed to load items', 'error'));
-  }, [toast]);
+    void Promise.all([inventoryService.getAll(), walletService.getBalance().catch(() => null)])
+      .then(([items, balance]) => {
+        setOptions(items.map((i) => ({ label: `${i.name} (${i.unit})`, value: i.id })));
+        if (balance != null) setWalletBalance(balance);
+        if (preselect && items.some((i) => i.id === preselect)) setItemId(preselect);
+        else if (items.length && !preselect) setItemId(items[0].id);
+      })
+      .catch((err) => toast(err instanceof Error ? err.message : 'Failed to load items', 'error'))
+      .finally(() => setLoading(false));
+  }, [toast, preselect]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (saving) return;
     const fd = new FormData(e.currentTarget);
-    const itemId = String(fd.get('itemId'));
-    const costRaw = String(fd.get('cost') ?? '').trim();
+    const selectedId = String(fd.get('itemId') || itemId);
+    const quantity = Number(fd.get('quantity'));
+    const cost = Number(fd.get('cost'));
+    if (!(cost > 0)) {
+      toast('Enter the total purchase price', 'error');
+      return;
+    }
+    if (walletBalance != null && walletBalance < cost) {
+      toast(
+        `Not enough money in wallet. Wallet has ${formatCurrency(walletBalance)}, need ${formatCurrency(cost)}.`,
+        'error'
+      );
+      return;
+    }
     setSaving(true);
     try {
-      await inventoryService.stockIn(itemId, {
+      await inventoryService.stockIn(selectedId, {
         date: String(fd.get('date')),
-        quantity: Number(fd.get('quantity')),
-        cost: costRaw ? Number(costRaw) : null,
-        supplier: String(fd.get('supplier') ?? '') || null,
+        quantity,
+        cost,
         notes: String(fd.get('notes') ?? '') || null,
       });
-      toast('Stock in recorded');
-      router.push(`/inventory/${itemId}`);
+      toast(`Stock in saved — ${formatCurrency(cost)} posted to cashbook`);
+      router.push(`/inventory/${selectedId}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to record stock in', 'error');
-    } finally {
       setSaving(false);
     }
   };
 
+  if (loading) return <LoadingState label="Loading items…" />;
+
   return (
     <div>
-      <PageHeader title="Stock In" description="Add quantity to inventory." />
+      <PageHeader
+        title="Stock In"
+        description={
+          walletBalance != null
+            ? `Add quantity and total purchase price. Taken from wallet (${formatCurrency(walletBalance)}).`
+            : 'Add quantity and total purchase price — posts to the cashbook.'
+        }
+      />
       <Card>
-        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
-          <Select name="itemId" label="Item" required options={options} placeholder="Select item" />
-          <Input name="date" label="Date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
-          <Input name="quantity" label="Quantity" type="number" min={0.01} step="0.01" required />
-          <Input name="cost" label="Total Cost (Rs.)" type="number" min={0} step="0.01" />
-          <Input name="supplier" label="Supplier" className="sm:col-span-2" />
-          <div className="sm:col-span-2">
-            <Textarea name="notes" label="Notes" rows={3} />
-          </div>
-          <div className="flex gap-2 sm:col-span-2">
-            <Link href="/inventory">
-              <Button type="button" variant="outline">
-                Cancel
+        {!options.length ? (
+          <p className="text-sm text-muted-fg">
+            No items yet.{' '}
+            <Link href="/inventory/new" className="text-primary underline">
+              Add an item
+            </Link>{' '}
+            first.
+          </p>
+        ) : (
+          <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+            {walletBalance != null && walletBalance <= 0 && (
+              <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+                Wallet is empty. Add Money in on the cashbook before stocking in.
+              </p>
+            )}
+            <Select
+              name="itemId"
+              label="Item"
+              required
+              options={options}
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value)}
+              disabled={saving}
+            />
+            <Input
+              name="date"
+              label="Date"
+              type="date"
+              required
+              defaultValue={new Date().toISOString().slice(0, 10)}
+              disabled={saving}
+            />
+            <Input
+              name="quantity"
+              label="Quantity"
+              type="number"
+              min={0.01}
+              step="0.01"
+              required
+              disabled={saving}
+            />
+            <Input
+              name="cost"
+              label="Total purchase price (Rs.)"
+              type="number"
+              min={1}
+              step="0.01"
+              required
+              disabled={saving}
+              hint="Full amount paid for this delivery — not unit price"
+            />
+            <div className="sm:col-span-2">
+              <Textarea name="notes" label="Notes" rows={3} disabled={saving} />
+            </div>
+            <div className="flex gap-2 sm:col-span-2">
+              <Link href="/inventory">
+                <Button type="button" variant="outline" disabled={saving}>
+                  Cancel
+                </Button>
+              </Link>
+              <Button type="submit" loading={saving} disabled={!options.length}>
+                Save
               </Button>
-            </Link>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </form>
+            </div>
+          </form>
+        )}
       </Card>
     </div>
+  );
+}
+
+export default function StockInPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading…" />}>
+      <StockInForm />
+    </Suspense>
   );
 }

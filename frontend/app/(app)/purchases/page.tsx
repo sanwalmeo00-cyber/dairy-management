@@ -18,8 +18,11 @@ import {
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function PurchasesPage() {
   const { canModifyRecord, isOwnerOf, currentUser } = useAuth();
@@ -29,10 +32,21 @@ export default function PurchasesPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void purchasesService.getAll().then(setRows);
-  }, []);
+    void (async () => {
+      setLoading(true);
+      try {
+        setRows(await purchasesService.getAll());
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to load purchases', 'error');
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [toast]);
 
   const activeRows = useMemo(() => filterActive(rows, 'purchase'), [rows, filterActive]);
 
@@ -48,6 +62,11 @@ export default function PurchasesPage() {
       );
     });
   }, [activeRows, search, category]);
+
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${category}`
+  );
 
   const confirmDelete = () => {
     if (!deleteId) return;
@@ -73,66 +92,88 @@ export default function PurchasesPage() {
 
   return (
     <div>
-      <PageHeader title="Purchases" description="Farm supplies and operational purchases." action={{ label: 'Add Purchase', href: '/purchases/new' }} />
+      <PageHeader
+        title="Purchases"
+        description="Farm supplies and operational purchases."
+        action={{ label: 'Add Purchase', href: '/purchases/new' }}
+      />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search description, vendor…" className="sm:max-w-xs" />
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search description, vendor…"
+          className="sm:max-w-xs"
+        />
         <Select
-          options={['Feed', 'Medicine', 'Equipment', 'Transportation', 'Supplies', 'Other'].map((c) => ({
-            label: c,
-            value: c,
-          }))}
+          options={['Feed', 'Medicine', 'Equipment', 'Transportation', 'Supplies', 'Other'].map(
+            (c) => ({
+              label: c,
+              value: c,
+            })
+          )}
           placeholder="All categories"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
           className="sm:w-44"
         />
       </div>
-      <Table
-        data={filtered}
-        rowKey={(r) => r.id}
-        empty={<EmptyState title="No purchases" description="Add a purchase record." />}
-        columns={[
-          { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
-          { key: 'desc', header: 'Description', render: (r) => r.description },
-          { key: 'cat', header: 'Category', render: (r) => r.category },
-          { key: 'vendor', header: 'Vendor', render: (r) => r.vendor },
-          { key: 'total', header: 'Total', render: (r) => formatCurrency(r.totalAmount) },
-          {
-            key: 'payment',
-            header: 'Payment',
-            render: (r) => <Badge tone={statusTone(r.paymentStatus)}>{r.paymentStatus}</Badge>,
-          },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (r) => <OwnerBadge name={r.ownerName} isOwn={isOwnerOf(r.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (r) => (
-              <div className="flex justify-end gap-1">
-                <Button variant="ghost" size="sm" onClick={() => toast(`Purchase: ${r.description} (mock view)`)}>
-                  View
-                </Button>
-                {canModifyRecord(r.ownerId) && (
-                  <>
-                    <Link href="/purchases/new">
-                      <Button variant="outline" size="sm">
-                        Edit
-                      </Button>
-                    </Link>
-                    <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
-                      Delete
+      {loading ? (
+        <LoadingState label="Loading purchases…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(r) => r.id}
+            empty={<EmptyState title="No purchases" description="Add a purchase record." />}
+            columns={[
+              { key: 'date', header: 'Date', render: (r) => formatDate(r.date) },
+              { key: 'desc', header: 'Description', render: (r) => r.description },
+              { key: 'cat', header: 'Category', render: (r) => r.category },
+              { key: 'vendor', header: 'Vendor', render: (r) => r.vendor },
+              { key: 'total', header: 'Total', render: (r) => formatCurrency(r.totalAmount) },
+              {
+                key: 'payment',
+                header: 'Payment',
+                render: (r) => <Badge tone={statusTone(r.paymentStatus)}>{r.paymentStatus}</Badge>,
+              },
+              {
+                key: 'owner',
+                header: 'Owner',
+                render: (r) => <OwnerBadge name={r.ownerName} isOwn={isOwnerOf(r.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (r) => (
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => toast(`Purchase: ${r.description} (mock view)`)}
+                    >
+                      View
                     </Button>
-                  </>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+                    {canModifyRecord(r.ownerId) && (
+                      <>
+                        <Link href="/purchases/new">
+                          <Button variant="outline" size="sm">
+                            Edit
+                          </Button>
+                        </Link>
+                        <Button variant="danger" size="sm" onClick={() => setDeleteId(r.id)}>
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+          />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}

@@ -5,25 +5,31 @@ import {
   CreateGoatPurchaseInput,
   UpdateGoatPurchaseInput,
 } from '../validators/goatPurchases.validator';
+import { normalizeMoneyAccount } from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
+import { assertWalletCanSpend } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
 } as const;
 
-function serialize(
-  row: Prisma.GoatPurchaseGetPayload<{ include: typeof ownerInclude }>
-) {
+type PurchaseRow = Prisma.GoatPurchaseGetPayload<{ include: typeof ownerInclude }>;
+
+function serialize(row: PurchaseRow) {
   return {
     id: row.id,
     date: row.date.toISOString().slice(0, 10),
-    goatId: row.goatId ?? undefined,
     tagNumber: row.tagNumber,
+    goatId: row.goatId ?? undefined,
     seller: row.seller,
     purchasePrice: Number(row.purchasePrice),
     paymentStatus: row.paymentStatus,
+    account: normalizeMoneyAccount((row as PurchaseRow & { account?: string }).account),
     notes: row.notes ?? undefined,
     ownerId: row.ownerId,
     ownerName: row.owner.name,
+    addedById: row.ownerId,
+    addedByName: row.owner.name,
     deletedAt: row.deletedAt?.toISOString() ?? null,
     deletedBy: row.deletedBy ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -53,45 +59,37 @@ export class GoatPurchasesService {
       where: { id, deletedAt: null },
       include: ownerInclude,
     });
-    if (!row) throw new NotFoundError('Goat purchase not found');
+    if (!row) throw new NotFoundError('Purchase not found');
     return serialize(row);
   }
 
-  async create(input: CreateGoatPurchaseInput, ownerId: string) {
-    if (input.goatId) {
-      const goat = await prisma.goat.findFirst({
-        where: { id: input.goatId, deletedAt: null },
-      });
-      if (!goat) throw new NotFoundError('Goat not found');
-    }
-
+  async create(input: CreateGoatPurchaseInput, addedById: string) {
+    const account = normalizeMoneyAccount(input.account);
+    await assertWalletCanSpend(input.purchasePrice, 'this animal purchase');
     const row = await prisma.goatPurchase.create({
       data: {
         date: new Date(input.date),
         tagNumber: input.tagNumber.trim(),
         goatId: input.goatId ?? undefined,
-        seller: input.seller.trim(),
+        seller: input.seller?.trim() || '—',
         purchasePrice: input.purchasePrice,
-        paymentStatus: input.paymentStatus,
+        paymentStatus: input.paymentStatus ?? 'Paid',
         notes: input.notes ?? undefined,
-        ownerId,
+        ownerId: addedById,
       },
       include: ownerInclude,
     });
-    return serialize(row);
+    await setRecordAccount(prisma, 'GoatPurchase', row.id, account);
+    return serialize({ ...row, account } as PurchaseRow & { account: string });
   }
 
   async update(id: string, input: UpdateGoatPurchaseInput, userId: string, role: Role) {
     const existing = await prisma.goatPurchase.findFirst({ where: { id, deletedAt: null } });
-    if (!existing) throw new NotFoundError('Goat purchase not found');
+    if (!existing) throw new NotFoundError('Purchase not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    if (input.goatId) {
-      const goat = await prisma.goat.findFirst({
-        where: { id: input.goatId, deletedAt: null },
-      });
-      if (!goat) throw new NotFoundError('Goat not found');
-    }
+    const nextAccount =
+      input.account !== undefined ? normalizeMoneyAccount(input.account) : null;
 
     const row = await prisma.goatPurchase.update({
       where: { id },
@@ -99,19 +97,25 @@ export class GoatPurchasesService {
         ...(input.date !== undefined && { date: new Date(input.date) }),
         ...(input.tagNumber !== undefined && { tagNumber: input.tagNumber.trim() }),
         ...(input.goatId !== undefined && { goatId: input.goatId }),
-        ...(input.seller !== undefined && { seller: input.seller.trim() }),
+        ...(input.seller !== undefined && { seller: input.seller?.trim() || '—' }),
         ...(input.purchasePrice !== undefined && { purchasePrice: input.purchasePrice }),
         ...(input.paymentStatus !== undefined && { paymentStatus: input.paymentStatus }),
         ...(input.notes !== undefined && { notes: input.notes }),
       },
       include: ownerInclude,
     });
-    return serialize(row);
+    if (nextAccount) {
+      await setRecordAccount(prisma, 'GoatPurchase', id, nextAccount);
+    }
+    return serialize({
+      ...row,
+      account: nextAccount ?? (row as { account?: string }).account,
+    } as PurchaseRow & { account?: string });
   }
 
   async remove(id: string, userId: string, role: Role) {
     const existing = await prisma.goatPurchase.findFirst({ where: { id, deletedAt: null } });
-    if (!existing) throw new NotFoundError('Goat purchase not found');
+    if (!existing) throw new NotFoundError('Purchase not found');
     assertCanModify(existing.ownerId, userId, role);
 
     const row = await prisma.goatPurchase.update({

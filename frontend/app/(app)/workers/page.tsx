@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { workersService } from '@/services/workers';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -17,10 +17,14 @@ import {
   OwnerBadge,
   EmptyState,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function WorkersPage() {
+  const router = useRouter();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Worker[]>([]);
@@ -56,6 +60,11 @@ export default function WorkersPage() {
     });
   }, [rows, search, status]);
 
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${status}`
+  );
+
   const confirmDelete = async () => {
     if (!deleteId) return;
     const worker = rows.find((w) => w.id === deleteId);
@@ -80,7 +89,7 @@ export default function WorkersPage() {
     <div>
       <PageHeader
         title="Workers"
-        description="Farm staff, monthly salary, and payment records."
+        description="Farm staff, salary & advances (worker cashbook). Money given also posts to the main cashbook."
         action={{ label: 'Add Worker', href: '/workers/new' }}
       />
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -101,52 +110,49 @@ export default function WorkersPage() {
           className="sm:w-40"
         />
       </div>
-      <Table
-        data={filtered}
-        rowKey={(w) => w.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No workers'}
-            description={loading ? 'Fetching from the server.' : 'Add a worker to manage payroll.'}
+      {loading ? (
+        <LoadingState label="Loading workers…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(w) => w.id}
+            onRowClick={(w) => router.push(`/workers/${w.id}`)}
+            empty={
+              <EmptyState title="No workers" description="Add a worker to manage payroll." />
+            }
+            columns={[
+              { key: 'name', header: 'Name', render: (w) => w.name },
+              { key: 'role', header: 'Role', render: (w) => w.role },
+              { key: 'phone', header: 'Phone', render: (w) => w.phone },
+              { key: 'salary', header: 'Salary', render: (w) => formatCurrency(w.salary) },
+              { key: 'joined', header: 'Joined', render: (w) => formatDate(w.joiningDate) },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (w) => <Badge tone={statusTone(w.status)}>{w.status}</Badge>,
+              },
+              {
+                key: 'owner',
+                header: 'Owner',
+                render: (w) => <OwnerBadge name={w.ownerName} isOwn={isOwnerOf(w.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (w) =>
+                  canModifyRecord(w.ownerId) ? (
+                    <Button variant="danger" size="sm" onClick={() => setDeleteId(w.id)}>
+                      Delete
+                    </Button>
+                  ) : null,
+              },
+            ]}
           />
-        }
-        columns={[
-          { key: 'name', header: 'Name', render: (w) => w.name },
-          { key: 'role', header: 'Role', render: (w) => w.role },
-          { key: 'phone', header: 'Phone', render: (w) => w.phone },
-          { key: 'salary', header: 'Salary', render: (w) => formatCurrency(w.salary) },
-          { key: 'joined', header: 'Joined', render: (w) => formatDate(w.joiningDate) },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (w) => <Badge tone={statusTone(w.status)}>{w.status}</Badge>,
-          },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (w) => <OwnerBadge name={w.ownerName} isOwn={isOwnerOf(w.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (w) => (
-              <div className="flex justify-end gap-1">
-                <Link href={`/workers/${w.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-                {canModifyRecord(w.ownerId) && (
-                  <Button variant="danger" size="sm" onClick={() => setDeleteId(w.id)}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
       <ConfirmDialog
         open={!!deleteId}
         onClose={() => setDeleteId(null)}

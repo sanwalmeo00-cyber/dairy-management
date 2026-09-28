@@ -6,8 +6,8 @@ export type InventoryItemInput = {
   category: InventoryCategory;
   unit: string;
   currentStock?: number;
-  minimumStock: number;
-  cost: number;
+  minimumStock?: number;
+  cost?: number;
   dailyUsage?: number | null;
   expiryDate?: string | null;
   supplier?: string | null;
@@ -17,7 +17,8 @@ export type InventoryItemInput = {
 export type StockInInput = {
   date: string;
   quantity: number;
-  cost?: number | null;
+  /** Total purchase price for this delivery (Rs.). */
+  cost: number;
   supplier?: string | null;
   reason?: string | null;
   notes?: string | null;
@@ -26,7 +27,6 @@ export type StockInInput = {
 export type StockOutInput = {
   date: string;
   quantity: number;
-  reason: string;
   notes?: string | null;
 };
 

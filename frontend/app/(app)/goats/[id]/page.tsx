@@ -14,8 +14,10 @@ import {
   Button,
   ViewOnlyBanner,
   OwnerBadge,
+  LoadingState,
+  Skeleton,
 } from '@/components/ui';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatAgeMonths } from '@/lib/format';
 import type { Goat, Kid } from '@/types/farm';
 import { normalizeGoatStatus } from '@/lib/goatStatus';
 
@@ -25,17 +27,74 @@ export default function GoatDetailPage() {
   const [goat, setGoat] = useState<Goat | null>(null);
   const [goats, setGoats] = useState<Goat[]>([]);
   const [offspring, setOffspring] = useState<Kid[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    void goatsService.getById(id).then((g) => setGoat(g ?? null));
-    void goatsService.getAll().then(setGoats);
-    void kidsService.getAll().then((all) => {
-      setOffspring(all.filter((k) => k.motherId === id || k.fatherId === id));
-    });
+    let cancelled = false;
+    setLoading(true);
+    setNotFound(false);
+
+    void (async () => {
+      try {
+        const [g, herd, kids] = await Promise.all([
+          goatsService.getById(id),
+          goatsService.getAll(),
+          kidsService.getAll(),
+        ]);
+        if (cancelled) return;
+        if (!g) {
+          setGoat(null);
+          setNotFound(true);
+          return;
+        }
+        setGoat(g);
+        setGoats(herd);
+        setOffspring(kids.filter((k) => k.motherId === id || k.fatherId === id));
+      } catch {
+        if (!cancelled) {
+          setGoat(null);
+          setNotFound(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
-  if (!goat) {
-    return <p className="text-sm text-muted-fg">Goat not found.</p>;
+  if (loading) {
+    return (
+      <div>
+        <div className="mb-6 space-y-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <LoadingState label="Loading animal details…" />
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !goat) {
+    return (
+      <div>
+        <PageHeader title="Animal" description="Record not found.">
+          <Link href="/goats">
+            <Button variant="outline">Back to list</Button>
+          </Link>
+        </PageHeader>
+        <p className="text-sm text-muted-fg">This animal could not be loaded.</p>
+      </div>
+    );
   }
 
   const canEdit = canModifyRecord(goat.ownerId);
@@ -66,7 +125,8 @@ export default function GoatDetailPage() {
 
       {!canEdit && <ViewOnlyBanner ownerName={goat.ownerName} />}
 
-      <div className="mb-4 flex flex-wrap items-start gap-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-fg">Added by</span>
         <OwnerBadge name={goat.ownerName} isOwn={isOwnerOf(goat.ownerId)} />
       </div>
 
@@ -94,8 +154,8 @@ export default function GoatDetailPage() {
               <dd>{goat.color}</dd>
             </div>
             <div>
-              <dt className="text-muted-fg">Date of Birth</dt>
-              <dd>{formatDate(goat.dateOfBirth)}</dd>
+              <dt className="text-muted-fg">Age</dt>
+              <dd>{formatAgeMonths(goat.dateOfBirth)}</dd>
             </div>
             <div>
               <dt className="text-muted-fg">Weight</dt>

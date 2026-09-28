@@ -16,6 +16,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -28,22 +29,27 @@ function LoginForm() {
       return;
     }
 
-    const result = await login(email, password, 'user');
-    if (!result.ok) {
-      const message = result.message ?? 'Login failed.';
-      if (message.toLowerCase().includes('inactive')) {
-        setFieldErrors({ email: 'This account is inactive. Contact Super Admin.' });
-      } else if (message.toLowerCase().includes('invalid')) {
-        setFieldErrors({ password: 'Wrong email or password.' });
-      } else {
-        setFieldErrors({ password: message });
+    setSubmitting(true);
+    try {
+      const result = await login(email, password, 'user');
+      if (!result.ok) {
+        const message = result.message ?? 'Login failed.';
+        if (message.toLowerCase().includes('inactive')) {
+          setFieldErrors({ email: 'This account is inactive. Contact Super Admin.' });
+        } else if (message.toLowerCase().includes('invalid')) {
+          setFieldErrors({ password: 'Wrong email or password.' });
+        } else {
+          setFieldErrors({ password: message });
+        }
+        setFormError(message);
+        return;
       }
-      setFormError(message);
-      return;
-    }
 
-    toast('Welcome back');
-    router.push(params.get('next') || '/dashboard');
+      toast('Welcome back');
+      router.push(params.get('next') || '/dashboard');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -65,6 +71,7 @@ function LoginForm() {
           name="email"
           autoComplete="email"
           required
+          disabled={submitting}
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
@@ -80,6 +87,7 @@ function LoginForm() {
           name="password"
           autoComplete="current-password"
           required
+          disabled={submitting}
           value={password}
           onChange={(e) => {
             setPassword(e.target.value);
@@ -88,7 +96,7 @@ function LoginForm() {
           }}
           error={fieldErrors.password}
         />
-        <Button type="submit" className="w-full">
+        <Button type="submit" className="w-full" loading={submitting} loadingText="Signing in…">
           Login
         </Button>
       </form>

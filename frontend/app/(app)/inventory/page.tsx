@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, PackageMinus, PackagePlus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { PackageMinus, PackagePlus } from 'lucide-react';
 import { inventoryService } from '@/services/inventory';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -19,10 +20,13 @@ import {
   EmptyState,
   StatCard,
   ConfirmDialog,
+  LoadingState,
+  Pagination,
 } from '@/components/ui';
-import { formatDate } from '@/lib/format';
+import { usePagedList } from '@/lib/usePagedList';
 
 export default function InventoryPage() {
+  const router = useRouter();
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<InventoryItem[]>([]);
@@ -57,11 +61,13 @@ export default function InventoryPage() {
     });
   }, [rows, search, category]);
 
-  const lowCount = rows.filter((i) => i.currentStock > 0 && i.currentStock < i.minimumStock).length;
+  const { page, setPage, paged, pageSize, total } = usePagedList(
+    filtered,
+    `${search}|${category}`
+  );
+
+  const inStock = rows.filter((i) => i.currentStock > 0).length;
   const outCount = rows.filter((i) => i.currentStock <= 0).length;
-  const expiringCount = rows.filter(
-    (i) => i.expiryStatus === 'Expired' || i.expiryStatus === 'Expiring soon'
-  ).length;
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -95,35 +101,11 @@ export default function InventoryPage() {
         </Link>
       </PageHeader>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total items" value={String(rows.length)} hint="Tracked inventory" />
-        <StatCard label="Low stock" value={String(lowCount)} hint="Below minimum level" />
-        <StatCard label="Out of stock" value={String(outCount)} hint="Needs restocking" />
-        <StatCard label="Expiry alerts" value={String(expiringCount)} hint="Expired or soon" />
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <StatCard label="Total items" value={String(rows.length)} />
+        <StatCard label="In stock" value={String(inStock)} />
+        <StatCard label="Out of stock" value={String(outCount)} />
       </div>
-
-      {lowCount + outCount + expiringCount > 0 && (
-        <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            {outCount > 0 && (
-              <span>
-                <strong>{outCount}</strong> out of stock.{' '}
-              </span>
-            )}
-            {lowCount > 0 && (
-              <span>
-                <strong>{lowCount}</strong> low stock.{' '}
-              </span>
-            )}
-            {expiringCount > 0 && (
-              <span>
-                <strong>{expiringCount}</strong> expired or expiring soon.
-              </span>
-            )}
-          </p>
-        </div>
-      )}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <SearchInput value={search} onChange={setSearch} placeholder="Search items…" className="sm:max-w-xs" />
@@ -139,76 +121,56 @@ export default function InventoryPage() {
         />
       </div>
 
-      <Table
-        data={filtered}
-        rowKey={(i) => i.id}
-        empty={
-          <EmptyState
-            title={loading ? 'Loading…' : 'No inventory items'}
-            description="Add feed, medicine, or supplies to track stock."
-            actionLabel="Add Item"
-            actionHref="/inventory/new"
+      {loading ? (
+        <LoadingState label="Loading inventory…" />
+      ) : (
+        <>
+          <Table
+            data={paged}
+            rowKey={(i) => i.id}
+            onRowClick={(i) => router.push(`/inventory/${i.id}`)}
+            empty={
+              <EmptyState
+                title="No inventory items"
+                description="Add feed, medicine, or supplies to track stock."
+                actionLabel="Add Item"
+                actionHref="/inventory/new"
+              />
+            }
+            columns={[
+              { key: 'name', header: 'Item', render: (i) => i.name },
+              { key: 'cat', header: 'Category', render: (i) => i.category },
+              {
+                key: 'stock',
+                header: 'Stock',
+                render: (i) => `${i.currentStock} ${i.unit}`,
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (i) => <Badge tone={statusTone(i.status)}>{i.status}</Badge>,
+              },
+              {
+                key: 'owner',
+                header: 'Added by',
+                render: (i) => <OwnerBadge name={i.ownerName} isOwn={isOwnerOf(i.ownerId)} />,
+              },
+              {
+                key: 'actions',
+                header: '',
+                className: 'text-right',
+                render: (i) =>
+                  canModifyRecord(i.ownerId) ? (
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
+                      Delete
+                    </Button>
+                  ) : null,
+              },
+            ]}
           />
-        }
-        columns={[
-          { key: 'name', header: 'Item', render: (i) => i.name },
-          { key: 'cat', header: 'Category', render: (i) => i.category },
-          {
-            key: 'stock',
-            header: 'Stock',
-            render: (i) => `${i.currentStock} ${i.unit}`,
-          },
-          {
-            key: 'days',
-            header: 'Days left',
-            render: (i) => (i.daysLeft != null ? `~${i.daysLeft}` : '—'),
-          },
-          {
-            key: 'expiry',
-            header: 'Expiry',
-            render: (i) =>
-              i.expiryDate ? (
-                <span className="inline-flex flex-col gap-0.5">
-                  <span>{formatDate(i.expiryDate)}</span>
-                  {i.expiryStatus && i.expiryStatus !== 'Ok' && (
-                    <Badge tone={statusTone(i.expiryStatus)}>{i.expiryStatus}</Badge>
-                  )}
-                </span>
-              ) : (
-                '—'
-              ),
-          },
-          {
-            key: 'status',
-            header: 'Status',
-            render: (i) => <Badge tone={statusTone(i.status)}>{i.status}</Badge>,
-          },
-          {
-            key: 'owner',
-            header: 'Owner',
-            render: (i) => <OwnerBadge name={i.ownerName} isOwn={isOwnerOf(i.ownerId)} />,
-          },
-          {
-            key: 'actions',
-            header: '',
-            className: 'text-right',
-            render: (i) => (
-              <div className="flex justify-end gap-1">
-                <Link href={`/inventory/${i.id}`}>
-                  <Button variant="ghost" size="sm">
-                    View
-                  </Button>
-                </Link>
-                {canModifyRecord(i.ownerId) && (
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
-                    Delete
-                  </Button>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <ConfirmDialog
         open={!!deleteId}

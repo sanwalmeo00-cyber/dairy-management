@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MONEY_ACCOUNTS } from '@/lib/moneyAccount';
 
 export const expenseIdParamSchema = z.object({
   id: z.string().min(1),
@@ -9,12 +10,14 @@ const expenseCategory = z.enum([
   'Medicine',
   'Veterinary',
   'Worker Salary',
+  'Partner Payout',
   'Transport',
   'Equipment',
   'Maintenance',
   'Utilities',
   'Other',
 ]);
+const moneyAccount = z.enum(MONEY_ACCOUNTS);
 const paymentMethod = z.enum(['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa', 'Other']);
 const dateString = z
   .string()
@@ -26,10 +29,11 @@ export const createExpenseSchema = z.object({
   description: z.string().min(1).max(500),
   category: expenseCategory,
   amount: z.coerce.number().nonnegative(),
-  paymentMethod,
+  /** Preferred: which business wallet money left */
+  account: moneyAccount.optional(),
+  /** Legacy — derived from account when omitted */
+  paymentMethod: paymentMethod.optional(),
   notes: z.string().max(2000).optional().nullable(),
-  /** User who provided / paid the money */
-  ownerId: z.string().min(1).optional().nullable(),
 });
 
 export const updateExpenseSchema = createExpenseSchema.partial();

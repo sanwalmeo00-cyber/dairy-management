@@ -1,4 +1,5 @@
 import { cn } from '@/lib/format';
+import { Loader2 } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
@@ -8,6 +9,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   children: ReactNode;
+  loading?: boolean;
+  loadingText?: string;
 }
 
 const variants: Record<Variant, string> = {
@@ -29,6 +32,9 @@ export function Button({
   size = 'md',
   className,
   children,
+  loading = false,
+  loadingText = 'Saving…',
+  disabled,
   ...props
 }: ButtonProps) {
   return (
@@ -39,9 +45,17 @@ export function Button({
         sizes[size],
         className
       )}
+      disabled={disabled || loading}
       {...props}
     >
-      {children}
+      {loading ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          {loadingText}
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }

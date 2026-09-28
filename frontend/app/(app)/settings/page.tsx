@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { settingsService } from '@/services/settings';
@@ -10,10 +11,14 @@ export default function SettingsPage() {
   const { currentUser, refreshUser, logout } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const handleProfileSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (savingProfile) return;
     const fd = new FormData(e.currentTarget);
+    setSavingProfile(true);
     try {
       const updated = await settingsService.updateProfile({
         name: String(fd.get('name') ?? '').trim(),
@@ -23,11 +28,14 @@ export default function SettingsPage() {
       toast('Profile updated');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to update profile', 'error');
+    } finally {
+      setSavingProfile(false);
     }
   };
 
   const handlePasswordSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (savingPassword) return;
     const form = e.currentTarget;
     const fd = new FormData(form);
     const newPassword = String(fd.get('new') ?? '');
@@ -36,6 +44,7 @@ export default function SettingsPage() {
       toast('New passwords do not match', 'error');
       return;
     }
+    setSavingPassword(true);
     try {
       await settingsService.changePassword({
         currentPassword: String(fd.get('current') ?? ''),
@@ -46,6 +55,8 @@ export default function SettingsPage() {
       form.reset();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to update password', 'error');
+    } finally {
+      setSavingPassword(false);
     }
   };
 
@@ -61,16 +72,39 @@ export default function SettingsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <h2 className="mb-4 font-semibold">Profile</h2>
-          <form key={currentUser.id + currentUser.name + (currentUser.phone ?? '')} onSubmit={(e) => void handleProfileSave(e)} className="space-y-4">
-            <Input label="Name" defaultValue={currentUser.name} name="name" required />
-            <Input label="Email" type="email" defaultValue={currentUser.email} name="email" disabled />
-            <Input label="Phone" defaultValue={currentUser.phone ?? ''} name="phone" />
+          <form
+            key={currentUser.id + currentUser.name + (currentUser.phone ?? '')}
+            onSubmit={(e) => void handleProfileSave(e)}
+            className="space-y-4"
+          >
+            <Input
+              label="Name"
+              defaultValue={currentUser.name}
+              name="name"
+              required
+              disabled={savingProfile}
+            />
+            <Input
+              label="Email"
+              type="email"
+              defaultValue={currentUser.email}
+              name="email"
+              disabled
+            />
+            <Input
+              label="Phone"
+              defaultValue={currentUser.phone ?? ''}
+              name="phone"
+              disabled={savingProfile}
+            />
             <Input
               label="Role"
               defaultValue={currentUser.role === 'SUPER_ADMIN' ? 'Super Admin' : 'User'}
               disabled
             />
-            <Button type="submit">Save Profile</Button>
+            <Button type="submit" loading={savingProfile} loadingText="Saving…">
+              Save Profile
+            </Button>
           </form>
         </Card>
 
@@ -83,6 +117,7 @@ export default function SettingsPage() {
               name="current"
               required
               autoComplete="current-password"
+              disabled={savingPassword}
             />
             <Input
               label="New Password"
@@ -91,6 +126,7 @@ export default function SettingsPage() {
               required
               autoComplete="new-password"
               minLength={8}
+              disabled={savingPassword}
             />
             <Input
               label="Confirm Password"
@@ -99,8 +135,11 @@ export default function SettingsPage() {
               required
               autoComplete="new-password"
               minLength={8}
+              disabled={savingPassword}
             />
-            <Button type="submit">Update Password</Button>
+            <Button type="submit" loading={savingPassword} loadingText="Updating…">
+              Update Password
+            </Button>
           </form>
         </Card>
 

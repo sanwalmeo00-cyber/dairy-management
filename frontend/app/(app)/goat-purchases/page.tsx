@@ -2,11 +2,12 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { LoadingState } from '@/components/ui';
 
 export default function LegacyGoatPurchasesRedirect() {
   const router = useRouter();
   useEffect(() => {
     router.replace('/cashbook');
   }, [router]);
-  return <p className="text-sm text-muted-fg">Redirecting to cashbook…</p>;
+  return <LoadingState label="Redirecting to cashbook…" />;
 }

@@ -26,7 +26,7 @@ import {
 } from 'recharts';
 import { dashboardService, type DashboardData } from '@/services/dashboard';
 import { useToast } from '@/context/ToastContext';
-import { PageHeader, StatCard, Card, Button } from '@/components/ui';
+import { PageHeader, StatCard, Card, Button, LoadingState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 
 const PIE_COLORS = ['#2d5a3d', '#c4a35a', '#8fa392', '#b42318'];
@@ -54,7 +54,7 @@ export default function DashboardPage() {
   }, []);
 
   if (loading && !data) {
-    return <p className="text-sm text-muted-fg">Loading dashboard…</p>;
+    return <LoadingState label="Loading dashboard…" />;
   }
 
   if (!data) {

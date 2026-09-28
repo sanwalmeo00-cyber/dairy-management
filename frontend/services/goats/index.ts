@@ -1,5 +1,6 @@
 import { api } from '@/lib/api';
 import type { Goat } from '@/types/farm';
+import type { MoneyAccount } from '@/lib/moneyAccount';
 
 export type GoatInput = {
   tagNumber: string;
@@ -19,10 +20,11 @@ export type GoatInput = {
   fatherId?: string | null;
   motherId?: string | null;
   name?: string;
+  purchaseAccount?: MoneyAccount;
   /** When changing status to Sold */
   salePrice?: number;
   saleBuyer?: string;
-  salePaymentMethod?: string;
+  saleAccount?: MoneyAccount;
   salePaymentStatus?: string;
   saleDate?: string;
 };

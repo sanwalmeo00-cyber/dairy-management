@@ -32,13 +32,26 @@ export function handleApiError(err: unknown) {
   if (err instanceof ZodError) {
     return jsonError('Validation failed', 400, err.flatten());
   }
-  const message = err instanceof Error ? err.message : 'Internal server error';
+  const rawMessage = err instanceof Error ? err.message : 'Internal server error';
+  const cause =
+    err instanceof Error && err.cause instanceof Error
+      ? err.cause.message
+      : err instanceof Error && err.cause
+        ? String(err.cause)
+        : undefined;
+  const isDbFetch =
+    /fetch failed/i.test(rawMessage) ||
+    (cause != null && /fetch failed|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|certificate/i.test(cause));
+  const message = isDbFetch
+    ? 'Database connection failed (Turso unreachable). Check TURSO_DATABASE_URL / TURSO_AUTH_TOKEN and your network.'
+    : rawMessage;
   logger.error('Unhandled API error', {
-    message,
+    message: rawMessage,
+    cause,
     stack: err instanceof Error && env.NODE_ENV === 'development' ? err.stack : undefined,
   });
   return jsonError(
-    env.NODE_ENV === 'production' ? 'Internal server error' : message,
+    env.NODE_ENV === 'production' && !isDbFetch ? 'Internal server error' : message,
     500
   );
 }

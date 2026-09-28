@@ -41,6 +41,7 @@ export type ExpenseCategory =
   | 'Medicine'
   | 'Veterinary'
   | 'Worker Salary'
+  | 'Partner Payout'
   | 'Transport'
   | 'Equipment'
   | 'Maintenance'
@@ -69,6 +70,14 @@ export interface SoftDeletable {
 export interface OwnedRecord extends SoftDeletable {
   ownerId: string;
   ownerName: string;
+}
+
+/** Cashbook rows: who added the record + which business wallet */
+export interface FinanceRecord extends OwnedRecord {
+  addedById?: string;
+  addedByName?: string;
+  /** Cash in Hand | Bank Account | JazzCash | EasyPaisa | Other */
+  account?: string;
 }
 
 export interface DeletedRecord {
@@ -145,7 +154,7 @@ export interface Kid extends OwnedRecord {
   breedingId?: string;
 }
 
-export interface GoatPurchase extends OwnedRecord {
+export interface GoatPurchase extends FinanceRecord {
   id: string;
   date: string;
   tagNumber: string;
@@ -170,7 +179,7 @@ export interface Purchase extends OwnedRecord {
   notes?: string;
 }
 
-export interface Sale extends OwnedRecord {
+export interface Sale extends FinanceRecord {
   id: string;
   date: string;
   tagNumber: string;
@@ -182,7 +191,7 @@ export interface Sale extends OwnedRecord {
   notes?: string;
 }
 
-export interface Expense extends OwnedRecord {
+export interface Expense extends FinanceRecord {
   id: string;
   date: string;
   description: string;
@@ -263,6 +272,8 @@ export interface InventoryTransaction extends OwnedRecord {
   supplier?: string;
   cost?: number;
   notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ActivityItem {

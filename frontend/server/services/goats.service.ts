@@ -7,12 +7,19 @@ import {
   healthFromGoatStatus,
   normalizeGoatStatus,
 } from '@/lib/goatStatus';
+import {
+  normalizeMoneyAccount,
+  paymentMethodFromAccount,
+} from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
+import { assertWalletCanSpend } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
 } as const;
 
 const SALE_STATUS_NOTE = 'Linked to animal status → Sold';
+const PURCHASE_ON_ADD_NOTE = 'Auto from animal add';
 
 function toDate(value: string | null | undefined): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -86,31 +93,77 @@ export class GoatsService {
     if (existing) throw new ConflictError('Tag number already exists');
 
     const status = resolveStatus(input.status, 'Healthy');
-    const healthStatus =
-      input.healthStatus ?? healthFromGoatStatus(status);
+    const healthStatus = input.healthStatus ?? healthFromGoatStatus(status);
+    const dob = new Date(input.dateOfBirth);
+    if (Number.isNaN(dob.getTime())) {
+      throw new ValidationError('Invalid date of birth');
+    }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dob > today) {
+      throw new ValidationError('Date of birth cannot be in the future');
+    }
 
-    const goat = await prisma.goat.create({
-      data: {
-        tagNumber: input.tagNumber,
-        name: input.name,
-        breed: input.breed,
-        gender: input.gender,
-        dateOfBirth: new Date(input.dateOfBirth),
-        purchaseDate: toDate(input.purchaseDate) ?? undefined,
-        purchasePrice: input.purchasePrice ?? undefined,
-        currentValue: input.currentValue,
-        weight: input.weight,
-        color: input.color,
-        healthStatus,
-        vaccinationStatus: input.vaccinationStatus,
-        status,
-        imageUrl: input.imageUrl ?? undefined,
-        notes: input.notes ?? undefined,
-        fatherId: input.fatherId ?? undefined,
-        motherId: input.motherId ?? undefined,
-        ownerId,
-      },
-      include: ownerInclude,
+    const purchaseAmount =
+      input.purchasePrice != null && Number(input.purchasePrice) > 0
+        ? Number(input.purchasePrice)
+        : Number(input.currentValue);
+
+    // Purchase date = when the animal was bought (defaults to today). Must not be before DOB.
+    const purchaseDate =
+      toDate(input.purchaseDate) ?? new Date(new Date().toISOString().slice(0, 10));
+    if (purchaseDate && purchaseDate < dob) {
+      throw new ValidationError('Purchase date cannot be before date of birth');
+    }
+
+    const cashAccount = normalizeMoneyAccount(input.purchaseAccount);
+
+    if (purchaseAmount > 0) {
+      await assertWalletCanSpend(purchaseAmount, 'buying this animal');
+    }
+
+    const goat = await prisma.$transaction(async (tx) => {
+      const created = await tx.goat.create({
+        data: {
+          tagNumber: input.tagNumber,
+          name: input.name,
+          breed: input.breed,
+          gender: input.gender,
+          dateOfBirth: dob,
+          purchaseDate,
+          purchasePrice: purchaseAmount > 0 ? purchaseAmount : undefined,
+          currentValue: input.currentValue,
+          weight: input.weight,
+          color: input.color,
+          healthStatus,
+          vaccinationStatus: input.vaccinationStatus,
+          status,
+          imageUrl: input.imageUrl ?? undefined,
+          notes: input.notes ?? undefined,
+          fatherId: input.fatherId ?? undefined,
+          motherId: input.motherId ?? undefined,
+          ownerId,
+        },
+        include: ownerInclude,
+      });
+
+      if (purchaseAmount > 0) {
+        const purchase = await tx.goatPurchase.create({
+          data: {
+            date: purchaseDate,
+            tagNumber: created.tagNumber,
+            goatId: created.id,
+            seller: 'Supplier',
+            purchasePrice: purchaseAmount,
+            paymentStatus: 'Paid',
+            notes: PURCHASE_ON_ADD_NOTE,
+            ownerId,
+          },
+        });
+        await setRecordAccount(tx, 'GoatPurchase', purchase.id, cashAccount);
+      }
+
+      return created;
     });
 
     return serializeGoat(goat);
@@ -144,9 +197,16 @@ export class GoatsService {
         ? healthFromGoatStatus(nextStatus, existing.healthStatus)
         : undefined);
 
+    const saleAccount = becomingSold
+      ? normalizeMoneyAccount(input.saleAccount)
+      : null;
+    const salePaymentMethod = saleAccount
+      ? paymentMethodFromAccount(saleAccount)
+      : null;
+
     const goat = await prisma.$transaction(async (tx) => {
       if (becomingSold) {
-        await tx.sale.create({
+        const sale = await tx.sale.create({
           data: {
             date: new Date(input.saleDate ?? new Date().toISOString().slice(0, 10)),
             tagNumber: input.tagNumber?.trim() || existing.tagNumber,
@@ -154,11 +214,12 @@ export class GoatsService {
             buyer: (input.saleBuyer ?? 'Walk-in buyer').trim(),
             salePrice: input.salePrice!,
             paymentStatus: input.salePaymentStatus ?? 'Paid',
-            paymentMethod: input.salePaymentMethod ?? 'Cash',
+            paymentMethod: salePaymentMethod!,
             notes: SALE_STATUS_NOTE,
-            ownerId: existing.ownerId,
+            ownerId: userId,
           },
         });
+        await setRecordAccount(tx, 'Sale', sale.id, saleAccount!);
       }
 
       if (leavingSold) {
@@ -185,7 +246,8 @@ export class GoatsService {
           ...(input.currentValue !== undefined && {
             currentValue: becomingSold ? input.salePrice! : input.currentValue,
           }),
-          ...(becomingSold && input.currentValue === undefined && { currentValue: input.salePrice! }),
+          ...(becomingSold &&
+            input.currentValue === undefined && { currentValue: input.salePrice! }),
           ...(input.weight !== undefined && { weight: input.weight }),
           ...(input.color !== undefined && { color: input.color }),
           ...(healthStatus !== undefined && { healthStatus }),

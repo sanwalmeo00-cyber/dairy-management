@@ -7,6 +7,9 @@ import {
   StockOutInput,
   UpdateInventoryItemInput,
 } from '../validators/inventory.validator';
+import { paymentMethodFromAccount, WALLET_ACCOUNT } from '@/lib/moneyAccount';
+import { setRecordAccount } from '../utils/account';
+import { assertWalletCanSpend } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -15,27 +18,32 @@ const ownerInclude = {
 type ItemRow = Prisma.InventoryItemGetPayload<{ include: typeof ownerInclude }>;
 type TxnRow = Prisma.InventoryTransactionGetPayload<{ include: typeof ownerInclude }>;
 
-function deriveStatus(currentStock: number, minimumStock: number) {
+/** Marker in Expense.notes so cashbook rows link back to stock-in. */
+export const STOCK_IN_EXPENSE_PREFIX = 'Auto from inventory stock-in:';
+
+function expenseNoteFor(txnId: string, userNotes?: string | null) {
+  const marker = `${STOCK_IN_EXPENSE_PREFIX}${txnId}`;
+  const extra = userNotes?.trim();
+  return extra ? `${marker}\n${extra}` : marker;
+}
+
+function expenseCategoryForInventory(category: string): string {
+  switch (category) {
+    case 'Goat Feed':
+      return 'Feed';
+    case 'Medicine':
+    case 'Vaccines':
+      return 'Medicine';
+    case 'Equipment':
+      return 'Equipment';
+    default:
+      return 'Other';
+  }
+}
+
+function deriveStatus(currentStock: number) {
   if (currentStock <= 0) return 'Out of Stock';
-  if (currentStock < minimumStock) return 'Low Stock';
   return 'In Stock';
-}
-
-function deriveDaysLeft(currentStock: number, dailyUsage: number | null) {
-  if (dailyUsage == null || dailyUsage <= 0) return null;
-  return Math.floor(currentStock / dailyUsage);
-}
-
-function deriveExpiryStatus(expiryDate: Date | null) {
-  if (!expiryDate) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const exp = new Date(expiryDate);
-  exp.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return 'Expired';
-  if (diffDays <= 30) return 'Expiring soon';
-  return 'Ok';
 }
 
 function serializeItem(row: ItemRow) {
@@ -52,12 +60,13 @@ function serializeItem(row: ItemRow) {
     minimumStock,
     cost: Number(row.cost),
     dailyUsage: dailyUsage ?? undefined,
-    daysLeft: deriveDaysLeft(currentStock, dailyUsage),
+    daysLeft:
+      dailyUsage != null && dailyUsage > 0 ? Math.floor(currentStock / dailyUsage) : null,
     expiryDate: row.expiryDate ? row.expiryDate.toISOString().slice(0, 10) : undefined,
-    expiryStatus: deriveExpiryStatus(row.expiryDate),
+    expiryStatus: undefined as string | undefined,
     supplier: row.supplier ?? undefined,
     notes: row.notes ?? undefined,
-    status: deriveStatus(currentStock, minimumStock),
+    status: deriveStatus(currentStock),
     ownerId: row.ownerId,
     ownerName: row.owner.name,
     deletedAt: row.deletedAt?.toISOString() ?? null,
@@ -119,9 +128,9 @@ export class InventoryService {
         name: input.name.trim(),
         category: input.category,
         unit: input.unit.trim(),
-        currentStock: input.currentStock,
-        minimumStock: input.minimumStock,
-        cost: input.cost,
+        currentStock: input.currentStock ?? 0,
+        minimumStock: input.minimumStock ?? 0,
+        cost: input.cost ?? 0,
         dailyUsage: input.dailyUsage ?? undefined,
         expiryDate: input.expiryDate ? new Date(input.expiryDate) : undefined,
         supplier: input.supplier ?? undefined,
@@ -177,12 +186,22 @@ export class InventoryService {
     if (!existing) throw new NotFoundError('Inventory item not found');
     assertCanModify(existing.ownerId, ownerId, role);
 
-    const [, txn] = await prisma.$transaction([
-      prisma.inventoryItem.update({
+    await assertWalletCanSpend(input.cost, 'this inventory purchase');
+
+    const paymentMethod = paymentMethodFromAccount(WALLET_ACCOUNT);
+
+    const txn = await prisma.$transaction(async (tx) => {
+      await tx.inventoryItem.update({
         where: { id },
-        data: { currentStock: { increment: input.quantity } },
-      }),
-      prisma.inventoryTransaction.create({
+        data: {
+          currentStock: { increment: input.quantity },
+          ...(input.supplier != null && input.supplier !== ''
+            ? { supplier: input.supplier }
+            : {}),
+        },
+      });
+
+      const created = await tx.inventoryTransaction.create({
         data: {
           itemId: id,
           date: new Date(input.date),
@@ -190,13 +209,28 @@ export class InventoryService {
           direction: 'in',
           reason: input.reason ?? 'Stock In',
           supplier: input.supplier ?? undefined,
-          cost: input.cost ?? undefined,
+          cost: input.cost,
           notes: input.notes ?? undefined,
           ownerId,
         },
         include: ownerInclude,
-      }),
-    ]);
+      });
+
+      const expense = await tx.expense.create({
+        data: {
+          date: new Date(input.date),
+          description: `Stock in · ${existing.name} (${input.quantity} ${existing.unit})`,
+          category: expenseCategoryForInventory(existing.category),
+          amount: input.cost,
+          paymentMethod,
+          notes: expenseNoteFor(created.id, input.notes),
+          ownerId,
+        },
+      });
+      await setRecordAccount(tx, 'Expense', expense.id, WALLET_ACCOUNT);
+
+      return created;
+    });
 
     return {
       item: await this.findById(id),
@@ -227,7 +261,7 @@ export class InventoryService {
           date: new Date(input.date),
           quantity: input.quantity,
           direction: 'out',
-          reason: input.reason,
+          reason: 'Stock Out',
           notes: input.notes ?? undefined,
           ownerId,
         },
@@ -246,7 +280,7 @@ export class InventoryService {
     const rows = await prisma.inventoryTransaction.findMany({
       where: { itemId, deletedAt: null },
       include: ownerInclude,
-      orderBy: { date: 'desc' },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
     });
     return rows.map(serializeTxn);
   }
