@@ -1,4 +1,4 @@
-import type { ActivityItem, NotificationItem, FarmSettings } from '@/types/farm';
+import type { ActivityItem, FarmSettings } from '@/types/farm';
 
 export const mockDashboardStats = {
   totalGoats: 128,
@@ -44,30 +44,6 @@ export const mockActivities: ActivityItem[] = [
   { id: 'a3', message: 'New expense recorded', timeAgo: 'Yesterday', type: 'expense' },
   { id: 'a4', message: 'Worker payment added', timeAgo: 'Yesterday', type: 'payment' },
   { id: 'a5', message: 'Breeding planned', timeAgo: '2 days ago', type: 'breeding' },
-];
-
-export const mockNotifications: NotificationItem[] = [
-  {
-    id: 'n1',
-    title: 'New goat added',
-    message: 'A new goat was registered.',
-    timeAgo: '5 minutes ago',
-    read: false,
-  },
-  {
-    id: 'n2',
-    title: 'Low inventory',
-    message: 'Antibiotic stock is below minimum.',
-    timeAgo: '1 hour ago',
-    read: false,
-  },
-  {
-    id: 'n3',
-    title: 'Worker payment recorded',
-    message: 'Salary paid to Imran Ali.',
-    timeAgo: 'Yesterday',
-    read: true,
-  },
 ];
 
 export const mockFarmSettings: FarmSettings = {

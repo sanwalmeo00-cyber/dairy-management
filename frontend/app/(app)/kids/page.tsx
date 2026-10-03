@@ -1,13 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { kidsService } from '@/services/kids';
-import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import type { Goat, Kid } from '@/types/farm';
+import type { Kid } from '@/types/farm';
 import {
   PageHeader,
   SearchInput,
@@ -30,24 +29,16 @@ export default function KidsPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<Kid[]>([]);
-  const [goats, setGoats] = useState<Goat[]>([]);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const goatTag = useCallback(
-    (id: string) => goats.find((g) => g.id === id)?.tagNumber ?? id,
-    [goats]
-  );
-
   useEffect(() => {
     void (async () => {
       setLoading(true);
       try {
-        const [kids, herd] = await Promise.all([kidsService.getAll(), goatsService.getAll()]);
-        setRows(kids);
-        setGoats(herd);
+        setRows(await kidsService.getAll());
       } catch (err) {
         toast(err instanceof Error ? err.message : 'Failed to load kids', 'error');
         setRows([]);
@@ -67,10 +58,10 @@ export default function KidsPage() {
       if (!q) return true;
       return (
         k.tagNumber.toLowerCase().includes(q) ||
-        goatTag(k.motherId).toLowerCase().includes(q)
+        (k.motherTag ?? '').toLowerCase().includes(q)
       );
     });
-  }, [rows, search, status, goatTag]);
+  }, [rows, search, status]);
 
   const { page, setPage, paged, pageSize, total } = usePagedList(
     filtered,
@@ -158,7 +149,7 @@ export default function KidsPage() {
               { key: 'tag', header: 'Tag', render: (k) => k.tagNumber },
               { key: 'gender', header: 'Gender', render: (k) => k.gender },
               { key: 'dob', header: 'DOB', render: (k) => formatDate(k.dateOfBirth) },
-              { key: 'mother', header: 'Mother', render: (k) => goatTag(k.motherId) },
+              { key: 'mother', header: 'Mother', render: (k) => k.motherTag ?? '—' },
               {
                 key: 'status',
                 header: 'Status',
@@ -206,8 +197,8 @@ export default function KidsPage() {
         title="Delete kid?"
         description={
           pending
-            ? `Tag “${pending.tagNumber}” will be marked as deleted.`
-            : 'This record will be marked as deleted.'
+            ? `Tag “${pending.tagNumber}” will be deleted.`
+            : 'This record will be deleted.'
         }
         confirmLabel="Delete"
       />

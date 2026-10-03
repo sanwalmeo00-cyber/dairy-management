@@ -175,7 +175,7 @@ export default function InventoryPage() {
       <ConfirmDialog
         open={!!deleteId}
         title="Delete inventory item?"
-        description="This soft-deletes the item. Stock history remains in deleted records."
+        description="This item will be removed from the inventory list."
         confirmLabel="Delete"
         onConfirm={() => void confirmDelete()}
         onClose={() => setDeleteId(null)}

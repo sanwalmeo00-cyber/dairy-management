@@ -7,7 +7,8 @@ import {
   paymentMethodFromAccount,
 } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
-import { assertWalletCanSpend } from '../utils/wallet';
+import { assertWalletAllowsAmountChange, assertWalletCanSpend } from '../utils/wallet';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -93,6 +94,7 @@ export class ExpensesService {
       include: ownerInclude,
     });
     await setRecordAccount(prisma, 'Expense', row.id, account);
+    invalidateAppCaches();
     return serialize({ ...row, account } as ExpenseRow & { account: string });
   }
 
@@ -100,6 +102,15 @@ export class ExpensesService {
     const existing = await prisma.expense.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new NotFoundError('Expense not found');
     assertCanModify(existing.ownerId, userId, role);
+
+    if (input.amount !== undefined) {
+      await assertWalletAllowsAmountChange({
+        direction: 'out',
+        oldAmount: Number(existing.amount),
+        newAmount: input.amount,
+        actionLabel: 'updating this expense',
+      });
+    }
 
     const accountPatch =
       input.account !== undefined || input.paymentMethod !== undefined
@@ -124,6 +135,7 @@ export class ExpensesService {
     if (accountPatch) {
       await setRecordAccount(prisma, 'Expense', id, accountPatch.account);
     }
+    invalidateAppCaches();
     return serialize({
       ...row,
       account: accountPatch?.account ?? (row as { account?: string }).account,
@@ -131,16 +143,16 @@ export class ExpensesService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.expense.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.expense.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Expense not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.expense.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
-    });
-    return serialize(row);
+    await prisma.expense.delete({ where: { id } });
+    invalidateAppCaches();
+    return serialize(existing);
   }
 }
 

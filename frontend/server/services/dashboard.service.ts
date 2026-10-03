@@ -1,9 +1,19 @@
 import prisma from '../database/prisma';
-import { cacheGet, cacheSet } from '../utils/cache';
+import { cacheDelPrefix, cacheGet, cacheSet } from '../utils/cache';
 import { isOnFarmStatus } from '@/lib/goatStatus';
 
-const CACHE_KEY = 'dashboard:overview';
-const CACHE_TTL_MS = 60_000;
+export const DASHBOARD_CACHE_KEY = 'dashboard:overview:v3';
+const CACHE_TTL_MS = 45_000;
+
+/** Real animal sales — not partner “Money in” investment rows. */
+function isAnimalSale(r: { goatId?: string | null; tagNumber?: string | null }) {
+  return Boolean(r.goatId) || Boolean(r.tagNumber && r.tagNumber !== '—');
+}
+
+/** Farm cost expense — exclude partner cash-out (capital return, not farm cost). */
+function isFarmExpense(r: { category?: string | null }) {
+  return r.category !== 'Partner Payout';
+}
 
 function monthKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -41,17 +51,14 @@ async function buildDashboard() {
   const months = lastNMonths(6);
   const rangeStart = months[0].start;
 
+  // Keep Turso round-trips low: one query per entity family (not duplicates).
   const [
     goats,
     kids,
     sales,
     expenses,
-    salesInRange,
-    expensesInRange,
+    purchases,
     inventoryItems,
-    recentGoats,
-    recentSales,
-    recentExpenses,
     recentBreedings,
     recentPayments,
     recentInventory,
@@ -64,7 +71,6 @@ async function buildDashboard() {
         gender: true,
         status: true,
         breed: true,
-        currentValue: true,
         createdAt: true,
       },
     }),
@@ -74,41 +80,33 @@ async function buildDashboard() {
     }),
     prisma.sale.findMany({
       where: { deletedAt: null },
-      select: { salePrice: true, date: true, createdAt: true, tagNumber: true },
+      select: {
+        id: true,
+        salePrice: true,
+        date: true,
+        createdAt: true,
+        tagNumber: true,
+        goatId: true,
+      },
     }),
     prisma.expense.findMany({
       where: { deletedAt: null },
-      select: { amount: true, date: true, createdAt: true, description: true },
+      select: {
+        id: true,
+        amount: true,
+        date: true,
+        createdAt: true,
+        description: true,
+        category: true,
+      },
     }),
-    prisma.sale.findMany({
-      where: { deletedAt: null, date: { gte: rangeStart } },
-      select: { salePrice: true, date: true },
-    }),
-    prisma.expense.findMany({
-      where: { deletedAt: null, date: { gte: rangeStart } },
-      select: { amount: true, date: true },
+    prisma.goatPurchase.findMany({
+      where: { deletedAt: null },
+      select: { id: true, purchasePrice: true, date: true, createdAt: true, tagNumber: true },
     }),
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },
       select: { currentStock: true, minimumStock: true },
-    }),
-    prisma.goat.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, tagNumber: true, createdAt: true },
-    }),
-    prisma.sale.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, tagNumber: true, createdAt: true },
-    }),
-    prisma.expense.findMany({
-      where: { deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { id: true, description: true, createdAt: true },
     }),
     prisma.breeding.findMany({
       where: { deletedAt: null },
@@ -131,23 +129,35 @@ async function buildDashboard() {
   ]);
 
   const activeGoats = goats.filter((g) => isOnFarmStatus(g.status));
-  const totalSales = sales.reduce((s, r) => s + Number(r.salePrice), 0);
-  const totalExpenses = expenses.reduce((s, r) => s + Number(r.amount), 0);
+
+  // Animal sales only (not partner investment). Total expense = purchases + farm costs
+  // (feed, medicine, etc.) — not partner cash-out.
+  const animalSales = sales.filter(isAnimalSale);
+  const farmExpenses = expenses.filter(isFarmExpense);
+  const purchaseTotal = purchases.reduce((s, r) => s + Number(r.purchasePrice), 0);
+  const expenseTotal = farmExpenses.reduce((s, r) => s + Number(r.amount), 0);
+  const totalSales = animalSales.reduce((s, r) => s + Number(r.salePrice), 0);
+  const totalExpenses = purchaseTotal + expenseTotal;
   const profitOrLoss = totalSales - totalExpenses;
   const lowStockItems = inventoryItems.filter(
     (i) => Number(i.currentStock) <= 0 || Number(i.currentStock) < Number(i.minimumStock)
   ).length;
 
   const salesVsExpenses = months.map((m) => {
-    const monthSales = salesInRange
+    const monthSales = animalSales
       .filter((r) => r.date >= m.start && r.date <= m.end)
       .reduce((s, r) => s + Number(r.salePrice), 0);
-    const monthExpenses = expensesInRange
+    const monthPurchases = purchases
+      .filter((r) => r.date >= m.start && r.date <= m.end)
+      .reduce((s, r) => s + Number(r.purchasePrice), 0);
+    const monthExpenses = farmExpenses
       .filter((r) => r.date >= m.start && r.date <= m.end)
       .reduce((s, r) => s + Number(r.amount), 0);
-    return { month: m.label, sales: monthSales, expenses: monthExpenses };
+    return { month: m.label, sales: monthSales, expenses: monthPurchases + monthExpenses };
   });
 
+  // Population uses createdAt/DOB vs month end — no extra query
+  void rangeStart;
   const population = months.map((m) => {
     const adults = goats.filter((g) => g.createdAt <= m.end).length;
     const kidCount = kids.filter((k) => (k.dateOfBirth ?? k.createdAt) <= m.end).length;
@@ -155,25 +165,32 @@ async function buildDashboard() {
   });
 
   const genderMap = new Map<string, number>();
-  for (const g of goats) {
-    genderMap.set(g.gender, (genderMap.get(g.gender) ?? 0) + 1);
-  }
-  const gender = [...genderMap.entries()].map(([name, value]) => ({ name, value }));
-
   const statusMap = new Map<string, number>();
-  for (const g of goats) {
-    statusMap.set(g.status, (statusMap.get(g.status) ?? 0) + 1);
-  }
-  const status = [...statusMap.entries()].map(([name, value]) => ({ name, value }));
-
   const breedMap = new Map<string, number>();
   for (const g of goats) {
+    genderMap.set(g.gender, (genderMap.get(g.gender) ?? 0) + 1);
+    statusMap.set(g.status, (statusMap.get(g.status) ?? 0) + 1);
     const breed = g.breed || 'Other';
     breedMap.set(breed, (breedMap.get(breed) ?? 0) + 1);
   }
+  const gender = [...genderMap.entries()].map(([name, value]) => ({ name, value }));
+  const status = [...statusMap.entries()].map(([name, value]) => ({ name, value }));
   const breeds = [...breedMap.entries()]
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
+
+  const recentGoats = [...goats]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5);
+  const recentSales = [...animalSales]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5);
+  const recentExpenses = [...farmExpenses]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5);
+  const recentPurchases = [...purchases]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5);
 
   type Act = { id: string; message: string; timeAgo: string; type: string; at: Date };
   const rawActivities: Act[] = [
@@ -197,6 +214,13 @@ async function buildDashboard() {
       timeAgo: timeAgo(e.createdAt),
       type: 'expense',
       at: e.createdAt,
+    })),
+    ...recentPurchases.map((p) => ({
+      id: `purchase-${p.id}`,
+      message: `Animal purchase · tag ${p.tagNumber}`,
+      timeAgo: timeAgo(p.createdAt),
+      type: 'expense',
+      at: p.createdAt,
     })),
     ...recentBreedings.map((b) => ({
       id: `breeding-${b.id}`,
@@ -250,17 +274,21 @@ async function buildDashboard() {
 
 export type DashboardPayload = Awaited<ReturnType<typeof buildDashboard>>;
 
+export function invalidateDashboardCache() {
+  cacheDelPrefix('dashboard:');
+}
+
 export class DashboardService {
   async getOverview(options?: { refresh?: boolean }) {
     if (!options?.refresh) {
-      const cached = cacheGet<DashboardPayload>(CACHE_KEY);
+      const cached = cacheGet<DashboardPayload>(DASHBOARD_CACHE_KEY);
       if (cached) {
         return { ...cached, fromCache: true as const };
       }
     }
 
     const data = await buildDashboard();
-    cacheSet(CACHE_KEY, data, CACHE_TTL_MS);
+    cacheSet(DASHBOARD_CACHE_KEY, data, CACHE_TTL_MS);
     return { ...data, fromCache: false as const };
   }
 }

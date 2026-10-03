@@ -8,6 +8,14 @@ export type CreateFarmUserInput = {
   password: string;
 };
 
+export type UpdateFarmUserInput = {
+  name: string;
+  email: string;
+  phone?: string;
+  password?: string;
+  status?: 'Active' | 'Inactive';
+};
+
 function mapUser(raw: {
   id: string;
   email: string;
@@ -67,6 +75,19 @@ export const usersService = {
       status?: string;
       createdBy?: string | null;
     }>(`/users/${userId}/status`, { status });
+    return mapUser(row);
+  },
+
+  async update(userId: string, input: UpdateFarmUserInput): Promise<User> {
+    const row = await api.patch<{
+      id: string;
+      email: string;
+      name: string;
+      phone?: string | null;
+      role: string;
+      status?: string;
+      createdBy?: string | null;
+    }>(`/users/${userId}`, input);
     return mapUser(row);
   },
 };

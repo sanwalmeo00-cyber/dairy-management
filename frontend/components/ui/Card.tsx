@@ -25,17 +25,24 @@ export function StatCard({
   value,
   hint,
   icon,
+  valueClassName,
 }: {
   label: string;
   value: string;
   hint?: string;
   icon?: ReactNode;
+  valueClassName?: string;
 }) {
   return (
     <Card className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm text-muted-fg">{label}</p>
-        <p className="mt-1 truncate font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight sm:text-2xl">
+        <p
+          className={cn(
+            'mt-1 truncate font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight sm:text-2xl',
+            valueClassName
+          )}
+        >
           {value}
         </p>
         {hint && <p className="mt-1 text-xs text-muted-fg">{hint}</p>}

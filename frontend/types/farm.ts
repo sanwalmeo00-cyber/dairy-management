@@ -1,16 +1,5 @@
 export type Role = 'SUPER_ADMIN' | 'USER';
 
-export type SoftDeleteEntity =
-  | 'goat'
-  | 'breeding'
-  | 'kid'
-  | 'goat-purchase'
-  | 'purchase'
-  | 'sale'
-  | 'expense'
-  | 'worker'
-  | 'inventory';
-
 export type GoatGender = 'Male' | 'Female';
 export type GoatStatus =
   | 'Healthy'
@@ -80,18 +69,6 @@ export interface FinanceRecord extends OwnedRecord {
   account?: string;
 }
 
-export interface DeletedRecord {
-  id: string;
-  entity: SoftDeleteEntity;
-  recordId: string;
-  label: string;
-  ownerId: string;
-  ownerName: string;
-  deletedAt: string;
-  deletedBy: string;
-  deletedByName: string;
-}
-
 export interface User {
   id: string;
   name: string;
@@ -142,7 +119,9 @@ export interface Kid extends OwnedRecord {
   gender: GoatGender;
   dateOfBirth: string;
   motherId: string;
+  motherTag?: string;
   fatherId?: string;
+  fatherTag?: string;
   /** Linked animal in the main Animals list */
   goatId?: string;
   weight: number;
@@ -281,14 +260,6 @@ export interface ActivityItem {
   message: string;
   timeAgo: string;
   type: 'goat' | 'sale' | 'expense' | 'payment' | 'breeding' | 'inventory';
-}
-
-export interface NotificationItem {
-  id: string;
-  title: string;
-  message: string;
-  timeAgo: string;
-  read: boolean;
 }
 
 export interface FarmSettings {

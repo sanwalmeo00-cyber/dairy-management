@@ -18,8 +18,11 @@ export type KidInput = {
 };
 
 export const kidsService = {
-  async getAll(): Promise<Kid[]> {
-    return api.get<Kid[]>('/kids');
+  async getAll(filters?: { parentId?: string }): Promise<Kid[]> {
+    const q = filters?.parentId
+      ? `?parentId=${encodeURIComponent(filters.parentId)}`
+      : '';
+    return api.get<Kid[]>(`/kids${q}`);
   },
   async getById(id: string): Promise<Kid | undefined> {
     try {

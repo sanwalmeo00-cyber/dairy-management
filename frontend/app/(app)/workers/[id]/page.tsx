@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { workersService, workerPaymentsService } from '@/services/workers';
 import { walletService } from '@/services/finance';
@@ -237,63 +238,83 @@ export default function WorkerDetailPage() {
       <Modal
         open={giveOpen}
         onClose={() => !saving && setGiveOpen(false)}
-        title="Give money"
+        title={walletBalance != null && walletBalance <= 0 ? 'Wallet empty' : 'Give money'}
         footer={
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              disabled={saving}
-              onClick={() => setGiveOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="give-money-form"
-              className="w-full sm:w-auto"
-              loading={saving}
-              loadingText="Saving…"
-            >
-              Save
-            </Button>
-          </div>
+          walletBalance != null && walletBalance <= 0 ? (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setGiveOpen(false)}
+              >
+                Close
+              </Button>
+              <Link href="/cashbook/new?type=sale" className="w-full sm:w-auto">
+                <Button type="button" className="w-full">
+                  Go to Cashbook
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={saving}
+                onClick={() => setGiveOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                form="give-money-form"
+                className="w-full sm:w-auto"
+                loading={saving}
+                loadingText="Saving…"
+              >
+                Save
+              </Button>
+            </div>
+          )
         }
       >
-        {walletBalance != null && (
-          <p className="mb-4 text-sm text-muted-fg">
-            Wallet: <strong className="text-fg">{formatCurrency(walletBalance)}</strong>
-          </p>
-        )}
-        {walletBalance != null && walletBalance <= 0 && (
-          <p className="mb-4 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+        {walletBalance != null && walletBalance <= 0 ? (
+          <p className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
             Wallet is empty. Add Money in on the cashbook first.
           </p>
+        ) : (
+          <>
+            {walletBalance != null && (
+              <p className="mb-4 text-sm text-muted-fg">
+                Wallet: <strong className="text-fg">{formatCurrency(walletBalance)}</strong>
+              </p>
+            )}
+            <form
+              id="give-money-form"
+              onSubmit={(e) => void onRecordPayment(e)}
+              className="grid gap-4"
+            >
+              <Input
+                name="date"
+                label="Date"
+                type="date"
+                required
+                disabled={saving}
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
+              <Input
+                name="amount"
+                label="Amount (Rs.)"
+                type="number"
+                required
+                min={1}
+                step="1"
+                disabled={saving}
+              />
+              <Textarea name="notes" label="Notes" rows={2} disabled={saving} />
+            </form>
+          </>
         )}
-        <form
-          id="give-money-form"
-          onSubmit={(e) => void onRecordPayment(e)}
-          className="grid gap-4"
-        >
-          <Input
-            name="date"
-            label="Date"
-            type="date"
-            required
-            disabled={saving}
-            defaultValue={new Date().toISOString().slice(0, 10)}
-          />
-          <Input
-            name="amount"
-            label="Amount (Rs.)"
-            type="number"
-            required
-            min={1}
-            step="1"
-            disabled={saving}
-          />
-          <Textarea name="notes" label="Notes" rows={2} disabled={saving} />
-        </form>
       </Modal>
     </div>
   );

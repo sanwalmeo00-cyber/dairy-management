@@ -19,6 +19,8 @@ type LoginPortal = 'user' | 'superuser';
 interface AuthContextValue {
   currentUser: User;
   isAuthenticated: boolean;
+  /** True after localStorage session has been read (avoids slow auth flash). */
+  authReady: boolean;
   isSuperAdmin: boolean;
   users: User[];
   login: (
@@ -73,6 +75,7 @@ function findSeedUser(id: string | null): User {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User>(superAdmin);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [users, setUsers] = useState<User[]>(seedUsers);
 
   useEffect(() => {
@@ -85,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUsers([user]);
         setIsAuthenticated(true);
         localStorage.setItem(USERS_KEY, JSON.stringify([user]));
+        setAuthReady(true);
         return;
       } catch {
         /* fall through */
@@ -97,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsers([seed]);
     setIsAuthenticated(auth);
     localStorage.setItem(USERS_KEY, JSON.stringify([seed]));
+    setAuthReady(true);
   }, []);
 
   useEffect(() => {
@@ -235,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       currentUser,
       isAuthenticated,
+      authReady,
       isSuperAdmin: isSuperAdmin(currentUser),
       users,
       login,
@@ -250,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       currentUser,
       isAuthenticated,
+      authReady,
       users,
       login,
       register,

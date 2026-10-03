@@ -21,8 +21,8 @@ export function EmptyState({
       <h3 className="text-base font-semibold">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-muted-fg">{description}</p>}
       {actionLabel && actionHref && (
-        <Link href={actionHref} className="mt-4">
-          <Button>{actionLabel}</Button>
+        <Link href={actionHref} className="mt-4 w-full max-w-xs sm:w-auto">
+          <Button className="w-full sm:w-auto">{actionLabel}</Button>
         </Link>
       )}
     </div>

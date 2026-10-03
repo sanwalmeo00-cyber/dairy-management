@@ -9,7 +9,6 @@ import {
   Users,
   Package,
   Settings,
-  Trash2,
   UserCog,
   X,
 } from 'lucide-react';
@@ -47,7 +46,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         ...(isSuperAdmin
           ? [{ href: '/users', label: 'Users', icon: UserCog }]
           : []),
-        { href: '/deleted', label: 'Deleted', icon: Trash2 },
       ],
     },
     {
@@ -103,7 +101,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                         href={item.href}
                         onClick={onClose}
                         className={cn(
-                          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition',
+                          'flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition touch-manipulation active:bg-white/10',
                           active
                             ? 'bg-sidebar-active text-white'
                             : 'text-sidebar-fg/85 hover:bg-white/5'

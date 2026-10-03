@@ -1,11 +1,15 @@
 import { Prisma, Role } from '@prisma/client';
 import prisma from '../database/prisma';
 import { ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
+import { invalidateAppCaches } from '../utils/invalidate';
 import { CreateKidInput, UpdateKidInput } from '../validators/kids.validator';
 import { healthFromGoatStatus, normalizeGoatStatus } from '@/lib/goatStatus';
+import { hardDeleteGoatInTx } from './goats.service';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
+  mother: { select: { id: true, tagNumber: true } },
+  father: { select: { id: true, tagNumber: true } },
 } as const;
 
 function serializeKid(
@@ -18,7 +22,9 @@ function serializeKid(
     gender: kid.gender,
     dateOfBirth: kid.dateOfBirth.toISOString().slice(0, 10),
     motherId: kid.motherId,
+    motherTag: kid.mother?.tagNumber,
     fatherId: kid.fatherId ?? undefined,
+    fatherTag: kid.father?.tagNumber ?? undefined,
     goatId: kid.goatId ?? undefined,
     weight: Number(kid.weight),
     healthStatus: kid.healthStatus,
@@ -44,9 +50,16 @@ function assertCanModify(ownerId: string, userId: string, role: Role) {
 }
 
 export class KidsService {
-  async findAll() {
+  async findAll(filters?: { parentId?: string }) {
     const kids = await prisma.kid.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        ...(filters?.parentId
+          ? {
+              OR: [{ motherId: filters.parentId }, { fatherId: filters.parentId }],
+            }
+          : {}),
+      },
       include: ownerInclude,
       orderBy: { dateOfBirth: 'desc' },
     });
@@ -157,6 +170,7 @@ export class KidsService {
       return created;
     });
 
+    invalidateAppCaches();
     return serializeKid(kid);
   }
 
@@ -251,26 +265,23 @@ export class KidsService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.kid.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.kid.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Kid not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const now = new Date();
-    const kid = await prisma.$transaction(async (tx) => {
-      if (existing.goatId) {
-        await tx.goat.updateMany({
-          where: { id: existing.goatId, deletedAt: null },
-          data: { deletedAt: now, deletedBy: userId },
-        });
+    await prisma.$transaction(async (tx) => {
+      const linkedGoatId = existing.goatId;
+      await tx.kid.delete({ where: { id } });
+      if (linkedGoatId) {
+        await hardDeleteGoatInTx(tx, linkedGoatId);
       }
-      return tx.kid.update({
-        where: { id },
-        data: { deletedAt: now, deletedBy: userId },
-        include: ownerInclude,
-      });
     });
 
-    return serializeKid(kid);
+    invalidateAppCaches();
+    return serializeKid(existing);
   }
 }
 

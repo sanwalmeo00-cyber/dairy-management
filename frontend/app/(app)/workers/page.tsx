@@ -160,8 +160,8 @@ export default function WorkersPage() {
         title="Delete worker?"
         description={
           pending
-            ? `“${pending.name}” will be marked as deleted.`
-            : 'This record will be marked as deleted.'
+            ? `“${pending.name}” will be deleted.`
+            : 'This record will be deleted.'
         }
         confirmLabel="Delete"
       />

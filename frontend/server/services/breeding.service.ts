@@ -133,17 +133,15 @@ export class BreedingService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.breeding.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.breeding.findFirst({
+      where: { id, deletedAt: null },
+      include,
+    });
     if (!existing) throw new NotFoundError('Breeding record not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const record = await prisma.breeding.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include,
-    });
-
-    return serializeBreeding(record);
+    await prisma.breeding.delete({ where: { id } });
+    return serializeBreeding(existing);
   }
 }
 

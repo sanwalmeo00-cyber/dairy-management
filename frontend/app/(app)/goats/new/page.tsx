@@ -7,7 +7,16 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { goatsService } from '@/services/goats';
 import { walletService } from '@/services/finance';
-import { PageHeader, Card, Input, Select, Textarea, Button, ImageUpload } from '@/components/ui';
+import {
+  PageHeader,
+  Card,
+  Input,
+  Select,
+  Textarea,
+  Button,
+  ImageUpload,
+  LoadingState,
+} from '@/components/ui';
 import type { VaccinationStatus } from '@/types/farm';
 import { GOAT_STATUS_OPTIONS } from '@/lib/goatStatus';
 import { dobFromAgeMonths, formatCurrency } from '@/lib/format';
@@ -19,13 +28,15 @@ export default function NewGoatPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletReady, setWalletReady] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     void walletService
       .getBalance()
       .then(setWalletBalance)
-      .catch(() => setWalletBalance(null));
+      .catch(() => setWalletBalance(null))
+      .finally(() => setWalletReady(true));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -82,6 +93,38 @@ export default function NewGoatPage() {
       setSaving(false);
     }
   };
+
+  if (!walletReady) {
+    return <LoadingState label="Checking wallet…" />;
+  }
+
+  if (walletBalance != null && walletBalance <= 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Add Animal"
+          description="Purchase price is taken from the farm wallet."
+        />
+        <Card>
+          <p className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+            Wallet is empty. Add Money in on the cashbook before buying an animal with a purchase
+            price.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/goats">
+              <Button type="button" variant="outline">
+                Back
+              </Button>
+            </Link>
+            <Link href="/cashbook/new?type=sale">
+              <Button type="button">Go to Cashbook</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -95,11 +138,6 @@ export default function NewGoatPage() {
 
       <Card>
         <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
-          {walletBalance != null && walletBalance <= 0 && (
-            <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-              Wallet is empty. Add Money in on the cashbook before buying an animal with a purchase price.
-            </p>
-          )}
           <div className="sm:col-span-2">
             <ImageUpload folder="goats" value={imageUrl} onChange={setImageUrl} disabled={saving} />
           </div>

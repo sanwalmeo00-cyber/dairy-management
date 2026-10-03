@@ -67,7 +67,7 @@ export class UsersService {
       throw new ConflictError('Email already exists');
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 12);
+    const passwordHash = await bcrypt.hash(input.password, 10);
 
     return prisma.user.create({
       data: {
@@ -83,13 +83,39 @@ export class UsersService {
     });
   }
 
-  async update(id: string, input: UpdateUserInput) {
-    await this.findById(id);
+  async update(id: string, input: UpdateUserInput, actorId: string) {
+    const user = await this.findById(id);
+
+    if (input.status !== undefined) {
+      if (user.role === Role.SUPER_ADMIN) {
+        throw new ForbiddenError('Cannot change Super Admin status');
+      }
+      if (user.id === actorId) {
+        throw new ForbiddenError('You cannot deactivate your own account');
+      }
+    }
+
+    if (input.email !== undefined) {
+      const email = input.email.toLowerCase().trim();
+      const clash = await prisma.user.findFirst({
+        where: { email, NOT: { id }, deletedAt: null },
+      });
+      if (clash) {
+        throw new ConflictError('Email already exists');
+      }
+    }
+
+    const password =
+      input.password && input.password.trim().length > 0 ? input.password : undefined;
+    const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
+
     return prisma.user.update({
       where: { id },
       data: {
-        ...(input.name !== undefined && { name: input.name }),
-        ...(input.phone !== undefined && { phone: input.phone }),
+        ...(input.name !== undefined && { name: input.name.trim() }),
+        ...(input.email !== undefined && { email: input.email.toLowerCase().trim() }),
+        ...(input.phone !== undefined && { phone: input.phone?.trim() || null }),
+        ...(passwordHash !== undefined && { passwordHash }),
         ...(input.status !== undefined && { status: input.status }),
       },
       select: userSelect,
@@ -122,7 +148,7 @@ export class UsersService {
       throw new ValidationError('New password must be different from current password');
     }
 
-    const passwordHash = await bcrypt.hash(input.newPassword, 12);
+    const passwordHash = await bcrypt.hash(input.newPassword, 10);
     await prisma.user.update({
       where: { id: userId },
       data: { passwordHash },

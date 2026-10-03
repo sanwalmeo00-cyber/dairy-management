@@ -19,7 +19,7 @@ export function SearchInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-border bg-card pr-3 pl-9 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/20"
+        className="h-11 w-full rounded-lg border border-border bg-card pr-3 pl-9 text-base outline-none focus:border-primary focus:ring-2 focus:ring-ring/20 sm:h-10 sm:text-sm"
       />
     </div>
   );

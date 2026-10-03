@@ -22,3 +22,10 @@ export function cacheSet<T>(key: string, value: T, ttlMs: number) {
 export function cacheDel(key: string) {
   store.delete(key);
 }
+
+/** Delete keys that start with a prefix (e.g. "dashboard:"). */
+export function cacheDelPrefix(prefix: string) {
+  for (const key of store.keys()) {
+    if (key.startsWith(prefix)) store.delete(key);
+  }
+}

@@ -1,12 +1,14 @@
 import { Prisma, Role } from '@prisma/client';
 import prisma from '../database/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
+import { invalidateAppCaches } from '../utils/invalidate';
 import { CreateSaleInput, UpdateSaleInput } from '../validators/sales.validator';
 import {
   normalizeMoneyAccount,
   paymentMethodFromAccount,
 } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
+import { assertWalletAllowsAmountChange } from '../utils/wallet';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -93,6 +95,7 @@ export class SalesService {
       include: ownerInclude,
     });
     await setRecordAccount(prisma, 'Sale', row.id, account);
+    invalidateAppCaches();
     return serialize({ ...row, account } as SaleRow & { account: string });
   }
 
@@ -100,6 +103,15 @@ export class SalesService {
     const existing = await prisma.sale.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new NotFoundError('Sale not found');
     assertCanModify(existing.ownerId, userId, role);
+
+    if (input.salePrice !== undefined) {
+      await assertWalletAllowsAmountChange({
+        direction: 'in',
+        oldAmount: Number(existing.salePrice),
+        newAmount: input.salePrice,
+        actionLabel: 'updating this money-in record',
+      });
+    }
 
     const accountPatch =
       input.account !== undefined || input.paymentMethod !== undefined
@@ -127,6 +139,7 @@ export class SalesService {
     if (accountPatch) {
       await setRecordAccount(prisma, 'Sale', id, accountPatch.account);
     }
+    invalidateAppCaches();
     return serialize({
       ...row,
       account: accountPatch?.account ?? (row as { account?: string }).account,
@@ -134,16 +147,16 @@ export class SalesService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.sale.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.sale.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Sale not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.sale.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
-    });
-    return serialize(row);
+    await prisma.sale.delete({ where: { id } });
+    invalidateAppCaches();
+    return serialize(existing);
   }
 }
 

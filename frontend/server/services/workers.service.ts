@@ -2,6 +2,8 @@ import { Prisma, Role } from '@prisma/client';
 import prisma from '../database/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { CreateWorkerInput, UpdateWorkerInput } from '../validators/workers.validator';
+import { WORKER_PAYMENT_EXPENSE_PREFIX } from './workerPayments.service';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -91,16 +93,32 @@ export class WorkersService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.worker.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.worker.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Worker not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.worker.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
+    await prisma.$transaction(async (tx) => {
+      const payments = await tx.workerPayment.findMany({
+        where: { workerId: id },
+        select: { id: true },
+      });
+      for (const payment of payments) {
+        const marker = `${WORKER_PAYMENT_EXPENSE_PREFIX}${payment.id}`;
+        await tx.expense.deleteMany({
+          where: { notes: { startsWith: marker } },
+        });
+      }
+      if (payments.length > 0) {
+        await tx.workerPayment.deleteMany({ where: { workerId: id } });
+      }
+      await tx.worker.delete({ where: { id } });
     });
-    return serialize(row);
+
+    invalidateAppCaches();
+    return serialize(existing);
   }
 
   async monthSummary(workerId: string, month: string) {

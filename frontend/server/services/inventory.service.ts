@@ -10,6 +10,7 @@ import {
 import { paymentMethodFromAccount, WALLET_ACCOUNT } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
 import { assertWalletCanSpend } from '../utils/wallet';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -169,16 +170,32 @@ export class InventoryService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.inventoryItem.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.inventoryItem.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Inventory item not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.inventoryItem.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
+    await prisma.$transaction(async (tx) => {
+      const txns = await tx.inventoryTransaction.findMany({
+        where: { itemId: id },
+        select: { id: true },
+      });
+      for (const txn of txns) {
+        const marker = `${STOCK_IN_EXPENSE_PREFIX}${txn.id}`;
+        await tx.expense.deleteMany({
+          where: { notes: { startsWith: marker } },
+        });
+      }
+      if (txns.length > 0) {
+        await tx.inventoryTransaction.deleteMany({ where: { itemId: id } });
+      }
+      await tx.inventoryItem.delete({ where: { id } });
     });
-    return serializeItem(row);
+
+    invalidateAppCaches();
+    return serializeItem(existing);
   }
 
   async stockIn(id: string, input: StockInInput, ownerId: string, role: Role) {
@@ -232,6 +249,7 @@ export class InventoryService {
       return created;
     });
 
+    invalidateAppCaches();
     return {
       item: await this.findById(id),
       transaction: serializeTxn(txn),

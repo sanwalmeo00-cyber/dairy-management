@@ -13,6 +13,7 @@ import {
 } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
 import { assertWalletCanSpend } from '../utils/wallet';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -166,6 +167,7 @@ export class GoatsService {
       return created;
     });
 
+    invalidateAppCaches();
     return serializeGoat(goat);
   }
 
@@ -223,13 +225,11 @@ export class GoatsService {
       }
 
       if (leavingSold) {
-        await tx.sale.updateMany({
+        await tx.sale.deleteMany({
           where: {
             goatId: existing.id,
-            deletedAt: null,
             notes: SALE_STATUS_NOTE,
           },
-          data: { deletedAt: new Date(), deletedBy: userId },
         });
       }
 
@@ -268,17 +268,53 @@ export class GoatsService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.goat.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.goat.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Goat not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const goat = await prisma.goat.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
+    await prisma.$transaction(async (tx) => {
+      await hardDeleteGoatInTx(tx, id);
     });
 
-    return serializeGoat(goat);
+    invalidateAppCaches();
+    return serializeGoat(existing);
+  }
+}
+
+type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Permanently remove a goat and dependent kids / child animals. Cashbook rows are unlinked. */
+export async function hardDeleteGoatInTx(tx: TxClient, goatId: string) {
+  const queue = [goatId];
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const motherKids = await tx.kid.findMany({
+      where: { motherId: id },
+      select: { goatId: true },
+    });
+    for (const kid of motherKids) {
+      if (kid.goatId && !seen.has(kid.goatId)) {
+        queue.push(kid.goatId);
+      }
+    }
+
+    await tx.goat.updateMany({ where: { fatherId: id }, data: { fatherId: null } });
+    await tx.goat.updateMany({ where: { motherId: id }, data: { motherId: null } });
+    await tx.kid.updateMany({ where: { fatherId: id }, data: { fatherId: null } });
+    await tx.kid.deleteMany({ where: { motherId: id } });
+    await tx.kid.deleteMany({ where: { goatId: id } });
+    await tx.breeding.deleteMany({ where: { femaleGoatId: id } });
+    await tx.goatPurchase.updateMany({ where: { goatId: id }, data: { goatId: null } });
+    await tx.sale.updateMany({ where: { goatId: id }, data: { goatId: null } });
+    await tx.goat.delete({ where: { id } });
   }
 }
 
