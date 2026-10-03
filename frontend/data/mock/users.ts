@@ -3,8 +3,7 @@ import type { User } from '@/types/farm';
 export const superAdmin: User = {
   id: 'admin-1',
   name: 'Super Admin',
-  email: 'superadmin@example.com',
-  phone: '0300-0000000',
+  email: 'admin@gmail.com',
   role: 'SUPER_ADMIN',
   status: 'Active',
 };

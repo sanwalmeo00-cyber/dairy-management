@@ -11,6 +11,7 @@ import {
 } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
 import { assertWalletCanSpend } from '../utils/wallet';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -128,6 +129,7 @@ export class WorkerPaymentsService {
       return payment;
     });
 
+    invalidateAppCaches();
     return serialize(row);
   }
 
@@ -210,25 +212,21 @@ export class WorkerPaymentsService {
   async remove(id: string, userId: string, role: Role) {
     const existing = await prisma.workerPayment.findFirst({
       where: { id, deletedAt: null },
+      include: ownerInclude,
     });
     if (!existing) throw new NotFoundError('Worker payment not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.$transaction(async (tx) => {
-      const payment = await tx.workerPayment.update({
-        where: { id },
-        data: { deletedAt: new Date(), deletedBy: userId },
-        include: ownerInclude,
-      });
+    await prisma.$transaction(async (tx) => {
       const marker = `${WORKER_PAYMENT_EXPENSE_PREFIX}${id}`;
-      await tx.expense.updateMany({
-        where: { deletedAt: null, notes: { startsWith: marker } },
-        data: { deletedAt: new Date(), deletedBy: userId },
+      await tx.expense.deleteMany({
+        where: { notes: { startsWith: marker } },
       });
-      return payment;
+      await tx.workerPayment.delete({ where: { id } });
     });
 
-    return serialize(row);
+    invalidateAppCaches();
+    return serialize(existing);
   }
 }
 

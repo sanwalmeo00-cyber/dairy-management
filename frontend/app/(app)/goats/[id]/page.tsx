@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { goatsService } from '@/services/goats';
 import { kidsService } from '@/services/kids';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import {
   PageHeader,
   Card,
@@ -24,8 +25,9 @@ import { normalizeGoatStatus } from '@/lib/goatStatus';
 export default function GoatDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { canModifyRecord, isOwnerOf } = useAuth();
+  const { toast } = useToast();
   const [goat, setGoat] = useState<Goat | null>(null);
-  const [goats, setGoats] = useState<Goat[]>([]);
+  const [parentTags, setParentTags] = useState<{ father?: string; mother?: string }>({});
   const [offspring, setOffspring] = useState<Kid[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -37,10 +39,9 @@ export default function GoatDetailPage() {
 
     void (async () => {
       try {
-        const [g, herd, kids] = await Promise.all([
+        const [g, kids] = await Promise.all([
           goatsService.getById(id),
-          goatsService.getAll(),
-          kidsService.getAll(),
+          kidsService.getAll({ parentId: id }),
         ]);
         if (cancelled) return;
         if (!g) {
@@ -49,12 +50,21 @@ export default function GoatDetailPage() {
           return;
         }
         setGoat(g);
-        setGoats(herd);
-        setOffspring(kids.filter((k) => k.motherId === id || k.fatherId === id));
-      } catch {
+        setOffspring(kids);
+        const [father, mother] = await Promise.all([
+          g.fatherId ? goatsService.getById(g.fatherId) : Promise.resolve(undefined),
+          g.motherId ? goatsService.getById(g.motherId) : Promise.resolve(undefined),
+        ]);
+        if (cancelled) return;
+        setParentTags({
+          father: father?.tagNumber,
+          mother: mother?.tagNumber,
+        });
+      } catch (err) {
         if (!cancelled) {
           setGoat(null);
           setNotFound(true);
+          toast(err instanceof Error ? err.message : 'Failed to load animal', 'error');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -64,7 +74,7 @@ export default function GoatDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, toast]);
 
   if (loading) {
     return (
@@ -98,10 +108,6 @@ export default function GoatDetailPage() {
   }
 
   const canEdit = canModifyRecord(goat.ownerId);
-  const parentTag = (parentId?: string) => {
-    if (!parentId) return '—';
-    return goats.find((g) => g.id === parentId)?.tagNumber ?? parentId;
-  };
 
   return (
     <div>
@@ -163,11 +169,11 @@ export default function GoatDetailPage() {
             </div>
             <div>
               <dt className="text-muted-fg">Father</dt>
-              <dd>{parentTag(goat.fatherId)}</dd>
+              <dd>{parentTags.father ?? (goat.fatherId ? '—' : '—')}</dd>
             </div>
             <div>
               <dt className="text-muted-fg">Mother</dt>
-              <dd>{parentTag(goat.motherId)}</dd>
+              <dd>{parentTags.mother ?? '—'}</dd>
             </div>
           </dl>
         </Card>

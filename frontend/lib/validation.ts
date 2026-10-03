@@ -17,8 +17,6 @@ export function validateLoginFields(email: string, password: string): FieldError
 
   if (!password) {
     errors.password = 'Password is required.';
-  } else if (password.length < 6) {
-    errors.password = 'Password must be at least 6 characters.';
   }
 
   return errors;
@@ -53,6 +51,39 @@ export function validateCreateUserFields(input: {
   if (!input.password) {
     errors.password = 'Password is required.';
   } else if (input.password.length < 8) {
+    errors.password = 'Password must be at least 8 characters.';
+  }
+
+  return errors;
+}
+
+export function validateUpdateUserFields(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  password?: string;
+}): FieldErrors {
+  const errors: FieldErrors = {};
+
+  if (!input.name.trim()) {
+    errors.name = 'Full name is required.';
+  } else if (input.name.trim().length < 2) {
+    errors.name = 'Name must be at least 2 characters.';
+  } else if (input.name.trim().length > 100) {
+    errors.name = 'Name must be at most 100 characters.';
+  }
+
+  if (!input.email.trim()) {
+    errors.email = 'Email is required.';
+  } else if (!isValidEmail(input.email)) {
+    errors.email = 'Enter a valid email address (e.g. name@example.com).';
+  }
+
+  if (input.phone?.trim() && input.phone.trim().length > 32) {
+    errors.phone = 'Phone must be at most 32 characters.';
+  }
+
+  if (input.password && input.password.length > 0 && input.password.length < 8) {
     errors.password = 'Password must be at least 8 characters.';
   }
 

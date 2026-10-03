@@ -5,6 +5,8 @@ interface Column<T> {
   key: string;
   header: string;
   className?: string;
+  /** Hide this column in the mobile card list (still shown on desktop). */
+  hideOnMobile?: boolean;
   render: (row: T) => ReactNode;
 }
 
@@ -30,6 +32,7 @@ export function Table<T>({ columns, data, rowKey, empty, onRowClick }: TableProp
   }
 
   const clickable = Boolean(onRowClick);
+  const mobileColumns = columns.filter((col) => !col.hideOnMobile);
 
   const handleActivate = (row: T, e: MouseEvent | KeyboardEvent) => {
     if (!onRowClick) return;
@@ -44,50 +47,57 @@ export function Table<T>({ columns, data, rowKey, empty, onRowClick }: TableProp
 
   return (
     <>
-      {/* Mobile: stacked cards */}
-      <div className="space-y-3 md:hidden">
-        {data.map((row) => (
-          <div
-            key={rowKey(row)}
-            role={clickable ? 'button' : undefined}
-            tabIndex={clickable ? 0 : undefined}
-            onClick={(e) => handleActivate(row, e)}
-            onKeyDown={(e) => handleActivate(row, e)}
-            className={cn(
-              'rounded-xl border border-border bg-card p-4 shadow-sm',
-              clickable && 'cursor-pointer transition-colors hover:bg-muted/40 active:bg-muted/60'
-            )}
-          >
-            <dl className="space-y-2.5">
-              {columns.map((col) => {
-                const content = col.render(row);
-                if (content == null || content === false) return null;
-                const isActions = !col.header;
-                return (
-                  <div
-                    key={col.key}
-                    className={cn(
-                      'flex gap-3 text-sm',
-                      isActions ? 'justify-end pt-1' : 'items-start justify-between'
-                    )}
-                  >
-                    {col.header ? (
-                      <dt className="shrink-0 text-muted-fg">{col.header}</dt>
-                    ) : null}
-                    <dd
-                      className={cn(
-                        isActions ? 'w-full' : 'min-w-0 text-right font-medium break-words',
-                        col.className
-                      )}
-                    >
-                      {content}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </div>
-        ))}
+      {/* Mobile: compact list rows */}
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card md:hidden">
+        {data.map((row) => {
+          const actionCol = mobileColumns.find((c) => !c.header);
+          const infoCols = mobileColumns.filter((c) => c.header);
+          const actionContent = actionCol?.render(row);
+          const hasActions = actionContent != null && actionContent !== false;
+
+          return (
+            <div
+              key={rowKey(row)}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={(e) => handleActivate(row, e)}
+              onKeyDown={(e) => handleActivate(row, e)}
+              className={cn(
+                'px-3 py-3 touch-manipulation',
+                clickable && 'cursor-pointer transition-colors active:bg-muted/50'
+              )}
+            >
+              {hasActions ? (
+                <div
+                  data-stop-row-click
+                  className="-mr-1 -mt-1 mb-1 flex items-center justify-end gap-0.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {actionContent}
+                </div>
+              ) : null}
+              <dl className="min-w-0 space-y-1">
+                {infoCols.map((col) => {
+                  const content = col.render(row);
+                  if (content == null || content === false) return null;
+                  return (
+                    <div key={col.key} className="flex items-baseline justify-between gap-3 text-sm">
+                      <dt className="shrink-0 text-xs text-muted-fg">{col.header}</dt>
+                      <dd
+                        className={cn(
+                          'min-w-0 text-right font-medium break-words',
+                          col.className
+                        )}
+                      >
+                        {content}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+          );
+        })}
       </div>
 
       {/* Desktop: table */}

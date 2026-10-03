@@ -20,7 +20,7 @@ export function Textarea({ label, error, className, id, required, ...props }: Te
         id={areaId}
         required={required}
         className={cn(
-          'min-h-24 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none transition placeholder:text-muted-fg focus:border-primary focus:ring-2 focus:ring-ring/20',
+          'min-h-28 w-full rounded-lg border border-border bg-card px-3 py-2.5 text-base outline-none transition placeholder:text-muted-fg focus:border-primary focus:ring-2 focus:ring-ring/20 sm:min-h-24 sm:text-sm',
           error && 'border-danger',
           className
         )}

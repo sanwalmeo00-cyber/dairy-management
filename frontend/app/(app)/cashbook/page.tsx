@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import {
   expensesService,
   goatPurchasesService,
@@ -8,7 +9,7 @@ import {
 } from '@/services/finance';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import type { Expense, GoatPurchase, Sale } from '@/types/farm';
+import type { Expense, ExpenseCategory, GoatPurchase, Sale } from '@/types/farm';
 import {
   PageHeader,
   SearchInput,
@@ -23,6 +24,8 @@ import {
   Modal,
   LoadingState,
   Pagination,
+  Input,
+  Textarea,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { usePagedList } from '@/lib/usePagedList';
@@ -43,6 +46,9 @@ type CashbookEntry = {
   ownerName: string;
   addedById: string;
   addedByName: string;
+  /** Underlying category for expenses */
+  category?: string;
+  tagNumber?: string;
 };
 
 function isAnimalSale(r: Sale) {
@@ -73,6 +79,7 @@ function toEntries(
         ownerName: r.ownerName,
         addedById: r.addedById ?? r.ownerId,
         addedByName: r.addedByName ?? r.ownerName,
+        tagNumber: r.tagNumber,
       };
     }),
     ...purchases.map((r) => ({
@@ -89,6 +96,7 @@ function toEntries(
       ownerName: r.ownerName,
       addedById: r.addedById ?? r.ownerId,
       addedByName: r.addedByName ?? r.ownerName,
+      tagNumber: r.tagNumber,
     })),
     ...expenses.map((r) => {
       const isCashOut = r.category === 'Partner Payout';
@@ -108,6 +116,7 @@ function toEntries(
         ownerName: r.ownerName,
         addedById: r.addedById ?? r.ownerId,
         addedByName: r.addedByName ?? r.ownerName,
+        category: r.category,
       };
     }),
   ].sort((a, b) => b.date.localeCompare(a.date) || a.description.localeCompare(b.description));
@@ -121,6 +130,26 @@ const KIND_LABEL: Record<CashbookKind, string> = {
   cashout: 'Cash out',
 };
 
+const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'Feed',
+  'Medicine',
+  'Veterinary',
+  'Worker Salary',
+  'Transport',
+  'Equipment',
+  'Maintenance',
+  'Utilities',
+  'Other',
+];
+
+function rawRecordId(entry: CashbookEntry) {
+  return entry.id.replace(/^(sale|purchase|expense)-/, '');
+}
+
+function isSaleKind(kind: CashbookKind) {
+  return kind === 'sale' || kind === 'animalsale';
+}
+
 export default function CashbookPage() {
   const { canModifyRecord, isOwnerOf } = useAuth();
   const { toast } = useToast();
@@ -132,7 +161,16 @@ export default function CashbookPage() {
   const [userId, setUserId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<CashbookEntry | null>(null);
   const [detail, setDetail] = useState<CashbookEntry | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [editDate, setEditDate] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editParty, setEditParty] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editTag, setEditTag] = useState('');
+  const [editCategory, setEditCategory] = useState('Other');
 
   const load = async () => {
     setLoading(true);
@@ -201,7 +239,6 @@ export default function CashbookPage() {
     .reduce((s, r) => s + r.amount, 0);
   const wallet = moneyIn - moneyOut;
 
-  /** Profit = business income − business costs. Partner investment / cash-out are capital, not profit. */
   const businessIncome = filtered
     .filter((r) => r.kind === 'animalsale')
     .reduce((s, r) => s + r.amount, 0);
@@ -210,6 +247,31 @@ export default function CashbookPage() {
     .reduce((s, r) => s + r.amount, 0);
   const profit = businessIncome - businessCosts;
 
+  function openDetail(entry: CashbookEntry) {
+    setDetail(entry);
+    setEditing(false);
+  }
+
+  function startEdit(entry: CashbookEntry) {
+    setEditDate(entry.date);
+    setEditAmount(String(entry.amount));
+    setEditParty(entry.party);
+    setEditNotes(entry.notes ?? '');
+    setEditTag(entry.tagNumber && entry.tagNumber !== '—' ? entry.tagNumber : '');
+    setEditCategory(
+      entry.kind === 'expense' && entry.category && entry.category !== 'Partner Payout'
+        ? entry.category
+        : 'Other'
+    );
+    setEditing(true);
+  }
+
+  function closeDetail() {
+    if (saving) return;
+    setDetail(null);
+    setEditing(false);
+  }
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     if (!canModifyRecord(deleteTarget.ownerId)) {
@@ -217,54 +279,127 @@ export default function CashbookPage() {
       setDeleteTarget(null);
       return;
     }
-    const rawId = deleteTarget.id.replace(/^(sale|purchase|expense)-/, '');
+    const rawId = rawRecordId(deleteTarget);
     try {
-      if (deleteTarget.kind === 'sale') {
+      if (isSaleKind(deleteTarget.kind)) {
         await salesService.remove(rawId);
         setSales((prev) => prev.filter((r) => r.id !== rawId));
       } else if (deleteTarget.kind === 'purchase') {
         await goatPurchasesService.remove(rawId);
         setPurchases((prev) => prev.filter((r) => r.id !== rawId));
       } else {
-        // expense + cashout both stored as Expense
         await expensesService.remove(rawId);
         setExpenses((prev) => prev.filter((r) => r.id !== rawId));
       }
       toast('Entry deleted');
+      if (detail?.id === deleteTarget.id) closeDetail();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Delete failed', 'error');
     }
     setDeleteTarget(null);
   };
 
+  const onSaveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!detail || saving) return;
+    if (!canModifyRecord(detail.ownerId)) {
+      toast('You cannot edit another user’s record', 'error');
+      return;
+    }
+
+    const amount = Number(editAmount);
+    if (!(amount >= 0) || Number.isNaN(amount)) {
+      toast('Enter a valid amount', 'error');
+      return;
+    }
+
+    const rawId = rawRecordId(detail);
+    setSaving(true);
+    try {
+      if (isSaleKind(detail.kind)) {
+        const updated = await salesService.update(rawId, {
+          date: editDate,
+          salePrice: amount,
+          buyer: editParty.trim() || detail.party,
+          ...(detail.kind === 'animalsale'
+            ? { tagNumber: editTag.trim() || detail.tagNumber || '—' }
+            : { tagNumber: null }),
+          notes: editNotes.trim() || null,
+        });
+        setSales((prev) => prev.map((r) => (r.id === rawId ? updated : r)));
+      } else if (detail.kind === 'purchase') {
+        const tag = editTag.trim();
+        if (!tag) {
+          toast('Tag number is required', 'error');
+          setSaving(false);
+          return;
+        }
+        const updated = await goatPurchasesService.update(rawId, {
+          date: editDate,
+          tagNumber: tag,
+          purchasePrice: amount,
+          notes: editNotes.trim() || null,
+        });
+        setPurchases((prev) => prev.map((r) => (r.id === rawId ? updated : r)));
+      } else if (detail.kind === 'cashout') {
+        const partner = editParty.trim();
+        if (!partner) {
+          toast('Enter who received the cash', 'error');
+          setSaving(false);
+          return;
+        }
+        const updated = await expensesService.update(rawId, {
+          date: editDate,
+          amount,
+          category: 'Partner Payout',
+          description: `Cash out · ${partner}`,
+          notes: editNotes.trim() || null,
+        });
+        setExpenses((prev) => prev.map((r) => (r.id === rawId ? updated : r)));
+      } else {
+        const note = editNotes.trim();
+        const updated = await expensesService.update(rawId, {
+          date: editDate,
+          amount,
+          category: editCategory,
+          description: note || editCategory,
+          notes: note || null,
+        });
+        setExpenses((prev) => prev.map((r) => (r.id === rawId ? updated : r)));
+      }
+
+      toast('Entry updated');
+      setEditing(false);
+      setDetail(null);
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to update entry', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const canEditDetail = detail != null && canModifyRecord(detail.ownerId);
+
   return (
     <div>
       <PageHeader
         title="Cashbook"
-        description="Wallet = all cash in/out. Profit = animal sales − purchases & expenses (partner investment is not profit)."
         action={{ label: 'Add record', href: '/cashbook/new' }}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Money In"
-          value={formatCurrency(moneyIn)}
-          hint="Investment + animal sales → wallet"
-        />
-        <StatCard
-          label="Money Out"
-          value={formatCurrency(moneyOut)}
-          hint="Purchases, expenses, cash out"
-        />
-        <StatCard
-          label="Wallet"
-          value={formatCurrency(wallet)}
-          hint="Cash left (In − Out)"
-        />
+        <StatCard label="Money In" value={formatCurrency(moneyIn)} />
+        <StatCard label="Money Out" value={formatCurrency(moneyOut)} />
+        <StatCard label="Wallet" value={formatCurrency(wallet)} />
         <StatCard
           label={profit >= 0 ? 'Profit' : 'Loss'}
-          value={formatCurrency(Math.abs(profit))}
-          hint="Animal sales − purchases & expenses (investment not counted)"
+          value={
+            profit >= 0
+              ? formatCurrency(profit)
+              : `−${formatCurrency(Math.abs(profit))}`
+          }
+          valueClassName={profit >= 0 ? 'text-emerald-700' : 'text-red-700'}
         />
       </div>
 
@@ -304,7 +439,7 @@ export default function CashbookPage() {
           <Table
             data={paged}
             rowKey={(r) => r.id}
-            onRowClick={setDetail}
+            onRowClick={openDetail}
             empty={
               <EmptyState
                 title="No cashbook entries"
@@ -337,12 +472,20 @@ export default function CashbookPage() {
                 header: 'Description',
                 className: 'max-w-[12rem] truncate whitespace-nowrap md:max-w-[16rem]',
                 render: (r) => (
-                  <span className="block max-w-[12rem] truncate md:max-w-[16rem]" title={r.description}>
+                  <span
+                    className="block max-w-[12rem] truncate md:max-w-[16rem]"
+                    title={r.description}
+                  >
                     {r.description}
                   </span>
                 ),
               },
-              { key: 'party', header: 'Party', render: (r) => r.party },
+              {
+                key: 'party',
+                header: 'Party',
+                hideOnMobile: true,
+                render: (r) => r.party,
+              },
               {
                 key: 'amount',
                 header: 'Amount',
@@ -356,6 +499,7 @@ export default function CashbookPage() {
               {
                 key: 'addedBy',
                 header: 'Record added by',
+                hideOnMobile: true,
                 render: (r) => (
                   <OwnerBadge name={r.addedByName} isOwn={isOwnerOf(r.addedById)} />
                 ),
@@ -366,9 +510,27 @@ export default function CashbookPage() {
                 className: 'text-right',
                 render: (r) =>
                   canModifyRecord(r.ownerId) ? (
-                    <Button variant="danger" size="sm" onClick={() => setDeleteTarget(r)}>
-                      Delete
-                    </Button>
+                    <div className="inline-flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        aria-label="Edit"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
+                        onClick={() => {
+                          openDetail(r);
+                          startEdit(r);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Delete"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+                        onClick={() => setDeleteTarget(r)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   ) : null,
               },
             ]}
@@ -379,35 +541,142 @@ export default function CashbookPage() {
 
       <Modal
         open={!!detail}
-        onClose={() => setDetail(null)}
-        title={detail ? KIND_LABEL[detail.kind] : 'Entry detail'}
+        onClose={closeDetail}
+        title={
+          detail
+            ? editing
+              ? `Edit ${KIND_LABEL[detail.kind]}`
+              : KIND_LABEL[detail.kind]
+            : 'Entry detail'
+        }
         footer={
-          detail && canModifyRecord(detail.ownerId) ? (
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDetail(null)}>
-                Close
-              </Button>
-              <Button
-                variant="danger"
-                className="w-full sm:w-auto"
-                onClick={() => {
-                  setDeleteTarget(detail);
-                  setDetail(null);
-                }}
-              >
-                Delete
-              </Button>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setDetail(null)}>
-                Close
-              </Button>
-            </div>
-          )
+          detail && canEditDetail ? (
+            editing ? (
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={saving}
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  form="edit-cashbook-form"
+                  className="w-full sm:w-auto"
+                  loading={saving}
+                  loadingText="Saving…"
+                >
+                  Save changes
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  aria-label="Edit"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-fg hover:bg-muted hover:text-fg"
+                  onClick={() => startEdit(detail)}
+                >
+                  <Pencil className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+                  onClick={() => {
+                    setDeleteTarget(detail);
+                    setDetail(null);
+                    setEditing(false);
+                  }}
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              </div>
+            )
+          ) : undefined
         }
       >
-        {detail && (
+        {detail && editing ? (
+          <form
+            id="edit-cashbook-form"
+            onSubmit={(e) => void onSaveEdit(e)}
+            className="grid gap-4"
+          >
+            <Input
+              label="Date"
+              type="date"
+              required
+              value={editDate}
+              disabled={saving}
+              onChange={(e) => setEditDate(e.target.value)}
+            />
+            <Input
+              label="Amount (Rs.)"
+              type="number"
+              required
+              min={0}
+              step="1"
+              value={editAmount}
+              disabled={saving}
+              onChange={(e) => setEditAmount(e.target.value)}
+            />
+            {detail.kind === 'sale' && (
+              <Input
+                label="Money from"
+                required
+                value={editParty}
+                disabled={saving}
+                onChange={(e) => setEditParty(e.target.value)}
+              />
+            )}
+            {detail.kind === 'animalsale' && (
+              <Input
+                label="Tag number"
+                value={editTag}
+                disabled={saving}
+                onChange={(e) => setEditTag(e.target.value)}
+              />
+            )}
+            {detail.kind === 'purchase' && (
+              <Input
+                label="Tag number"
+                required
+                value={editTag}
+                disabled={saving}
+                onChange={(e) => setEditTag(e.target.value)}
+              />
+            )}
+            {detail.kind === 'cashout' && (
+              <Input
+                label="Given to"
+                required
+                value={editParty}
+                disabled={saving}
+                onChange={(e) => setEditParty(e.target.value)}
+              />
+            )}
+            {detail.kind === 'expense' && (
+              <Select
+                label="Category"
+                required
+                value={editCategory}
+                disabled={saving}
+                onChange={(e) => setEditCategory(e.target.value)}
+                options={EXPENSE_CATEGORIES.map((c) => ({ label: c, value: c }))}
+              />
+            )}
+            <Textarea
+              label="Notes"
+              rows={3}
+              value={editNotes}
+              disabled={saving}
+              required={detail.kind === 'expense'}
+              onChange={(e) => setEditNotes(e.target.value)}
+            />
+          </form>
+        ) : detail ? (
           <dl className="grid gap-3 text-sm">
             <div>
               <dt className="text-muted-fg">Date</dt>
@@ -451,7 +720,7 @@ export default function CashbookPage() {
               </dd>
             </div>
           </dl>
-        )}
+        ) : null}
       </Modal>
 
       <ConfirmDialog
@@ -461,8 +730,8 @@ export default function CashbookPage() {
         title="Delete cashbook entry?"
         description={
           deleteTarget
-            ? `“${deleteTarget.description}” will be marked as deleted.`
-            : 'This record will be marked as deleted.'
+            ? `“${deleteTarget.description}” will be deleted.`
+            : 'This record will be deleted.'
         }
         confirmLabel="Delete"
       />

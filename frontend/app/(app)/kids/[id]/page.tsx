@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { kidsService } from '@/services/kids';
-import { goatsService } from '@/services/goats';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import {
   PageHeader,
   Card,
@@ -18,13 +18,13 @@ import {
   Skeleton,
 } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import type { Goat, Kid } from '@/types/farm';
+import type { Kid } from '@/types/farm';
 
 export default function KidDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { canModifyRecord, isOwnerOf } = useAuth();
+  const { toast } = useToast();
   const [kid, setKid] = useState<Kid | null>(null);
-  const [goats, setGoats] = useState<Goat[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -34,7 +34,7 @@ export default function KidDetailPage() {
     setNotFound(false);
     void (async () => {
       try {
-        const [k, herd] = await Promise.all([kidsService.getById(id), goatsService.getAll()]);
+        const k = await kidsService.getById(id);
         if (cancelled) return;
         if (!k) {
           setKid(null);
@@ -42,11 +42,11 @@ export default function KidDetailPage() {
           return;
         }
         setKid(k);
-        setGoats(herd);
-      } catch {
+      } catch (err) {
         if (!cancelled) {
           setKid(null);
           setNotFound(true);
+          toast(err instanceof Error ? err.message : 'Failed to load kid', 'error');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -55,7 +55,7 @@ export default function KidDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, toast]);
 
   if (loading) {
     return (
@@ -74,10 +74,6 @@ export default function KidDetailPage() {
   }
 
   const canEdit = canModifyRecord(kid.ownerId);
-  const goatTag = (goatId?: string) => {
-    if (!goatId) return '—';
-    return goats.find((g) => g.id === goatId)?.tagNumber ?? goatId;
-  };
 
   return (
     <div>
@@ -119,11 +115,11 @@ export default function KidDetailPage() {
             </div>
             <div>
               <dt className="text-muted-fg">Mother</dt>
-              <dd>{goatTag(kid.motherId)}</dd>
+              <dd>{kid.motherTag ?? '—'}</dd>
             </div>
             <div>
               <dt className="text-muted-fg">Father</dt>
-              <dd>{goatTag(kid.fatherId)}</dd>
+              <dd>{kid.fatherTag ?? '—'}</dd>
             </div>
           </dl>
         </Card>
@@ -145,17 +141,13 @@ export default function KidDetailPage() {
             <div className="flex justify-between">
               <dt className="text-muted-fg">Status</dt>
               <dd>
-                <Badge tone={statusTone(kid.status)}>{kid.status}</Badge>
+                <Badge tone={statusTone(kid.status === 'Active' ? 'Healthy' : kid.status)}>
+                  {kid.status === 'Active' ? 'Healthy' : kid.status}
+                </Badge>
               </dd>
             </div>
           </dl>
         </Card>
-        {kid.notes && (
-          <Card className="lg:col-span-2">
-            <h2 className="mb-3 font-semibold">Notes</h2>
-            <p className="text-sm text-muted-fg">{kid.notes}</p>
-          </Card>
-        )}
       </div>
     </div>
   );

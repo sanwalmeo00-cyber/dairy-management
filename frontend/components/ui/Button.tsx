@@ -14,17 +14,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-fg hover:bg-primary-hover',
-  secondary: 'bg-accent text-accent-fg hover:opacity-90',
-  ghost: 'bg-transparent text-foreground hover:bg-muted',
-  danger: 'bg-danger text-danger-fg hover:opacity-90',
-  outline: 'border border-border bg-card text-foreground hover:bg-muted',
+  primary: 'bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-hover',
+  secondary: 'bg-accent text-accent-fg hover:opacity-90 active:opacity-90',
+  ghost: 'bg-transparent text-foreground hover:bg-muted active:bg-muted',
+  danger: 'bg-danger text-danger-fg hover:opacity-90 active:opacity-90',
+  outline: 'border border-border bg-card text-foreground hover:bg-muted active:bg-muted',
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-11 px-5 text-sm',
+  sm: 'min-h-10 px-3 text-sm sm:min-h-8 sm:h-8 sm:text-xs',
+  md: 'min-h-11 px-4 text-base sm:min-h-10 sm:h-10 sm:text-sm',
+  lg: 'min-h-12 px-5 text-base sm:min-h-11 sm:h-11 sm:text-sm',
 };
 
 export function Button({
@@ -40,7 +40,7 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg font-medium transition disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg font-medium transition touch-manipulation disabled:cursor-not-allowed disabled:opacity-50',
         variants[variant],
         sizes[size],
         className

@@ -27,8 +27,29 @@ export const createUserSchema = z.object({
 });
 
 export const updateUserSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  phone: z.string().max(32).optional().nullable(),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Full name is required')
+    .min(2, 'Name must be at least 2 characters')
+    .max(100, 'Name must be at most 100 characters')
+    .optional(),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Email is required')
+    .email('Enter a valid email address')
+    .optional(),
+  phone: z
+    .string()
+    .trim()
+    .max(32, 'Phone must be at most 32 characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  password: z
+    .union([z.string().min(8, 'Password must be at least 8 characters'), z.literal('')])
+    .optional(),
   status: z.enum(['Active', 'Inactive']).optional(),
 });
 

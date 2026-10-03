@@ -42,6 +42,7 @@ function LoginForm() {
           setFieldErrors({ password: message });
         }
         setFormError(message);
+        toast(message, 'error');
         return;
       }
 
@@ -84,6 +85,7 @@ function LoginForm() {
         <Input
           label="Password"
           type="password"
+          passwordToggle
           name="password"
           autoComplete="current-password"
           required

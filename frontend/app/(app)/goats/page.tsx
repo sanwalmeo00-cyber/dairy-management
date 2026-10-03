@@ -220,8 +220,8 @@ export default function GoatsPage() {
         title="Delete animal?"
         description={
           pending
-            ? `Tag “${pending.tagNumber}” will be marked as deleted.`
-            : 'This record will be marked as deleted.'
+            ? `Tag “${pending.tagNumber}” will be deleted.`
+            : 'This record will be deleted.'
         }
         confirmLabel="Delete"
       />

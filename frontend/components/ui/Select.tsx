@@ -96,7 +96,7 @@ export function Select({
         aria-expanded={open}
         onClick={() => !disabled && setOpen((v) => !v)}
         className={cn(
-          'flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-left text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 text-left text-base outline-none transition touch-manipulation focus:border-primary focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:text-sm',
           error && 'border-danger',
           !current && 'text-muted-fg'
         )}
@@ -110,7 +110,7 @@ export function Select({
       {open && (
         <ul
           role="listbox"
-          className="absolute top-[calc(100%+0.25rem)] right-0 left-0 z-[60] max-h-60 overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-lg"
+          className="absolute top-[calc(100%+0.25rem)] right-0 left-0 z-[60] max-h-[min(16rem,50vh)] overflow-y-auto rounded-lg border border-border bg-card py-1 shadow-lg"
         >
           {placeholder && (
             <li>
@@ -119,7 +119,7 @@ export function Select({
                 role="option"
                 aria-selected={current === ''}
                 className={cn(
-                  'flex w-full cursor-pointer px-3 py-2.5 text-left text-sm hover:bg-muted',
+                  'flex min-h-11 w-full cursor-pointer items-center px-3 py-2.5 text-left text-base hover:bg-muted active:bg-muted sm:min-h-0 sm:text-sm',
                   current === '' && 'bg-muted font-medium'
                 )}
                 onClick={() => emit('')}
@@ -135,7 +135,7 @@ export function Select({
                 role="option"
                 aria-selected={current === o.value}
                 className={cn(
-                  'flex w-full cursor-pointer px-3 py-2.5 text-left text-sm hover:bg-muted',
+                  'flex min-h-11 w-full cursor-pointer items-center px-3 py-2.5 text-left text-base hover:bg-muted active:bg-muted sm:min-h-0 sm:text-sm',
                   current === o.value && 'bg-primary/10 font-medium text-primary'
                 )}
                 onClick={() => emit(o.value)}

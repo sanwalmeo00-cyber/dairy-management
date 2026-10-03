@@ -7,7 +7,8 @@ import {
 } from '../validators/goatPurchases.validator';
 import { normalizeMoneyAccount } from '@/lib/moneyAccount';
 import { setRecordAccount } from '../utils/account';
-import { assertWalletCanSpend } from '../utils/wallet';
+import { assertWalletAllowsAmountChange, assertWalletCanSpend } from '../utils/wallet';
+import { invalidateAppCaches } from '../utils/invalidate';
 
 const ownerInclude = {
   owner: { select: { id: true, name: true } },
@@ -80,6 +81,7 @@ export class GoatPurchasesService {
       include: ownerInclude,
     });
     await setRecordAccount(prisma, 'GoatPurchase', row.id, account);
+    invalidateAppCaches();
     return serialize({ ...row, account } as PurchaseRow & { account: string });
   }
 
@@ -87,6 +89,15 @@ export class GoatPurchasesService {
     const existing = await prisma.goatPurchase.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new NotFoundError('Purchase not found');
     assertCanModify(existing.ownerId, userId, role);
+
+    if (input.purchasePrice !== undefined) {
+      await assertWalletAllowsAmountChange({
+        direction: 'out',
+        oldAmount: Number(existing.purchasePrice),
+        newAmount: input.purchasePrice,
+        actionLabel: 'updating this purchase',
+      });
+    }
 
     const nextAccount =
       input.account !== undefined ? normalizeMoneyAccount(input.account) : null;
@@ -107,6 +118,7 @@ export class GoatPurchasesService {
     if (nextAccount) {
       await setRecordAccount(prisma, 'GoatPurchase', id, nextAccount);
     }
+    invalidateAppCaches();
     return serialize({
       ...row,
       account: nextAccount ?? (row as { account?: string }).account,
@@ -114,16 +126,16 @@ export class GoatPurchasesService {
   }
 
   async remove(id: string, userId: string, role: Role) {
-    const existing = await prisma.goatPurchase.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.goatPurchase.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Purchase not found');
     assertCanModify(existing.ownerId, userId, role);
 
-    const row = await prisma.goatPurchase.update({
-      where: { id },
-      data: { deletedAt: new Date(), deletedBy: userId },
-      include: ownerInclude,
-    });
-    return serialize(row);
+    await prisma.goatPurchase.delete({ where: { id } });
+    invalidateAppCaches();
+    return serialize(existing);
   }
 }
 

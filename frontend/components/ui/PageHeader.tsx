@@ -20,7 +20,7 @@ export function PageHeader({ title, description, action, children }: PageHeaderP
           <p className="mt-1 text-sm text-muted-fg sm:max-w-2xl">{description}</p>
         )}
       </div>
-      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+      <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end [&>a]:block [&>a]:w-full sm:[&>a]:w-auto [&>a>button]:w-full sm:[&>a>button]:w-auto [&>button]:w-full sm:[&>button]:w-auto">
         {children}
         {action?.href && (
           <Link href={action.href} className="w-full sm:w-auto">

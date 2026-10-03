@@ -159,161 +159,190 @@ function NewCashbookEntryForm() {
         description={`Wallet balance: ${formatCurrency(walletBalance)}. Money in adds to the wallet; cash out, purchases, and expenses require enough balance.`}
       />
       <Card>
-        <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
-          {isMoneyOut && walletBalance <= 0 && (
-            <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+        {isMoneyOut && walletBalance <= 0 ? (
+          <div className="space-y-4">
+            <p className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
               Wallet is empty. Add Money in before cash out, purchase, or expense.
             </p>
-          )}
-          <Select
-            label="Entry type"
-            required
-            disabled={saving}
-            options={[
-              { label: 'Money in (partner invests)', value: 'sale' },
-              { label: 'Cash out (given to partner)', value: 'cashout' },
-              { label: 'Animal purchase (money out)', value: 'purchase' },
-              { label: 'Expense (money out)', value: 'expense' },
-            ]}
-            value={type}
-            onChange={(e) => setType(e.target.value as EntryType)}
-          />
-
-          <Input
-            name="date"
-            label="Date"
-            type="date"
-            required
-            disabled={saving}
-            defaultValue={new Date().toISOString().slice(0, 10)}
-          />
-
-          {type === 'sale' && (
-            <>
-              <Select
-                name="buyerId"
-                label="Money from"
-                required
-                disabled={saving || !partnerOptions.length}
-                options={partnerOptions}
-                value={moneyFromId}
-                onChange={(e) => setMoneyFromId(e.target.value)}
-                className="sm:col-span-2"
-              />
-              {!partnerOptions.length && (
-                <p className="sm:col-span-2 text-sm text-danger">
-                  No farm users found. Create a user (not Super Admin) first.
-                </p>
-              )}
-              <Input
-                name="salePrice"
-                label="Amount (Rs.)"
-                type="number"
-                required
-                disabled={saving}
-                className="sm:col-span-2"
-              />
-            </>
-          )}
-
-          {type === 'cashout' && (
-            <>
-              <Select
-                name="partnerId"
-                label="Given to"
-                required
-                disabled={saving || !partnerOptions.length}
-                options={partnerOptions}
-                value={givenToId}
-                onChange={(e) => setGivenToId(e.target.value)}
-                className="sm:col-span-2"
-              />
-              <Input
-                name="amount"
-                label="Amount (Rs.)"
-                type="number"
-                required
-                min={1}
-                disabled={saving}
-                className="sm:col-span-2"
-              />
-              <p className="sm:col-span-2 text-sm text-muted-fg">
-                Example: partner invested 100k; after animal sale you return 50k — record that 50k
-                here as cash out. The rest stays in the wallet.
-              </p>
-            </>
-          )}
-
-          {type === 'purchase' && (
-            <>
-              <Input
-                name="tagNumber"
-                label="Tag Number"
-                required
-                placeholder="e.g. G001"
-                disabled={saving}
-              />
-              <Input
-                name="purchasePrice"
-                label="Purchase Price (Rs.)"
-                type="number"
-                required
-                disabled={saving}
-              />
-            </>
-          )}
-
-          {type === 'expense' && (
-            <>
-              <Select
-                name="category"
-                label="Category"
-                required
-                disabled={saving}
-                options={(
-                  [
-                    'Feed',
-                    'Medicine',
-                    'Veterinary',
-                    'Worker Salary',
-                    'Transport',
-                    'Equipment',
-                    'Maintenance',
-                    'Utilities',
-                    'Other',
-                  ] as ExpenseCategory[]
-                ).map((c) => ({ label: c, value: c }))}
-              />
-              <Input
-                name="amount"
-                label="Amount (Rs.)"
-                type="number"
-                required
-                disabled={saving}
-              />
-            </>
-          )}
-
-          <div className="sm:col-span-2">
-            <Textarea
-              name="notes"
-              label="Notes"
-              rows={3}
-              disabled={saving}
-              required={type === 'expense'}
+            <Select
+              label="Entry type"
+              required
+              options={[
+                { label: 'Money in (partner invests)', value: 'sale' },
+                { label: 'Cash out (given to partner)', value: 'cashout' },
+                { label: 'Animal purchase (money out)', value: 'purchase' },
+                { label: 'Expense (money out)', value: 'expense' },
+              ]}
+              value={type}
+              onChange={(e) => setType(e.target.value as EntryType)}
             />
-          </div>
-          <div className="flex gap-2 sm:col-span-2">
-            <Link href="/cashbook">
-              <Button type="button" variant="outline" disabled={saving}>
-                Cancel
+            <div className="flex flex-wrap gap-2">
+              <Link href="/cashbook">
+                <Button type="button" variant="outline">
+                  Back
+                </Button>
+              </Link>
+              <Button type="button" onClick={() => setType('sale')}>
+                Add Money in
               </Button>
-            </Link>
-            <Button type="submit" loading={saving} disabled={!partnerOptions.length && (type === 'sale' || type === 'cashout')}>
-              Save
-            </Button>
+            </div>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
+            <Select
+              label="Entry type"
+              required
+              disabled={saving}
+              options={[
+                { label: 'Money in (partner invests)', value: 'sale' },
+                { label: 'Cash out (given to partner)', value: 'cashout' },
+                { label: 'Animal purchase (money out)', value: 'purchase' },
+                { label: 'Expense (money out)', value: 'expense' },
+              ]}
+              value={type}
+              onChange={(e) => setType(e.target.value as EntryType)}
+            />
+
+            <Input
+              name="date"
+              label="Date"
+              type="date"
+              required
+              disabled={saving}
+              defaultValue={new Date().toISOString().slice(0, 10)}
+            />
+
+            {type === 'sale' && (
+              <>
+                <Select
+                  name="buyerId"
+                  label="Money from"
+                  required
+                  disabled={saving || !partnerOptions.length}
+                  options={partnerOptions}
+                  value={moneyFromId}
+                  onChange={(e) => setMoneyFromId(e.target.value)}
+                  className="sm:col-span-2"
+                />
+                {!partnerOptions.length && (
+                  <p className="sm:col-span-2 text-sm text-danger">
+                    No farm users found. Create a user (not Super Admin) first.
+                  </p>
+                )}
+                <Input
+                  name="salePrice"
+                  label="Amount (Rs.)"
+                  type="number"
+                  required
+                  disabled={saving}
+                  className="sm:col-span-2"
+                />
+              </>
+            )}
+
+            {type === 'cashout' && (
+              <>
+                <Select
+                  name="partnerId"
+                  label="Given to"
+                  required
+                  disabled={saving || !partnerOptions.length}
+                  options={partnerOptions}
+                  value={givenToId}
+                  onChange={(e) => setGivenToId(e.target.value)}
+                  className="sm:col-span-2"
+                />
+                <Input
+                  name="amount"
+                  label="Amount (Rs.)"
+                  type="number"
+                  required
+                  min={1}
+                  disabled={saving}
+                  className="sm:col-span-2"
+                />
+                <p className="sm:col-span-2 text-sm text-muted-fg">
+                  Example: partner invested 100k; after animal sale you return 50k — record that 50k
+                  here as cash out. The rest stays in the wallet.
+                </p>
+              </>
+            )}
+
+            {type === 'purchase' && (
+              <>
+                <Input
+                  name="tagNumber"
+                  label="Tag Number"
+                  required
+                  placeholder="e.g. G001"
+                  disabled={saving}
+                />
+                <Input
+                  name="purchasePrice"
+                  label="Purchase Price (Rs.)"
+                  type="number"
+                  required
+                  disabled={saving}
+                />
+              </>
+            )}
+
+            {type === 'expense' && (
+              <>
+                <Select
+                  name="category"
+                  label="Category"
+                  required
+                  disabled={saving}
+                  options={(
+                    [
+                      'Feed',
+                      'Medicine',
+                      'Veterinary',
+                      'Worker Salary',
+                      'Transport',
+                      'Equipment',
+                      'Maintenance',
+                      'Utilities',
+                      'Other',
+                    ] as ExpenseCategory[]
+                  ).map((c) => ({ label: c, value: c }))}
+                />
+                <Input
+                  name="amount"
+                  label="Amount (Rs.)"
+                  type="number"
+                  required
+                  disabled={saving}
+                />
+              </>
+            )}
+
+            <div className="sm:col-span-2">
+              <Textarea
+                name="notes"
+                label="Notes"
+                rows={3}
+                disabled={saving}
+                required={type === 'expense'}
+              />
+            </div>
+            <div className="flex gap-2 sm:col-span-2">
+              <Link href="/cashbook">
+                <Button type="button" variant="outline" disabled={saving}>
+                  Cancel
+                </Button>
+              </Link>
+              <Button
+                type="submit"
+                loading={saving}
+                disabled={!partnerOptions.length && (type === 'sale' || type === 'cashout')}
+              >
+                Save
+              </Button>
+            </div>
+          </form>
+        )}
       </Card>
     </div>
   );

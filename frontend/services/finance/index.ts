@@ -42,6 +42,9 @@ export const goatPurchasesService = {
   async create(input: GoatPurchaseInput): Promise<GoatPurchase> {
     return api.post<GoatPurchase>('/goat-purchases', input);
   },
+  async update(id: string, input: Partial<GoatPurchaseInput>): Promise<GoatPurchase> {
+    return api.patch<GoatPurchase>(`/goat-purchases/${id}`, input);
+  },
   async remove(id: string): Promise<GoatPurchase> {
     return api.delete<GoatPurchase>(`/goat-purchases/${id}`);
   },
@@ -54,6 +57,9 @@ export const salesService = {
   async create(input: SaleInput): Promise<Sale> {
     return api.post<Sale>('/sales', input);
   },
+  async update(id: string, input: Partial<SaleInput>): Promise<Sale> {
+    return api.patch<Sale>(`/sales/${id}`, input);
+  },
   async remove(id: string): Promise<Sale> {
     return api.delete<Sale>(`/sales/${id}`);
   },
@@ -65,6 +71,9 @@ export const expensesService = {
   },
   async create(input: ExpenseInput): Promise<Expense> {
     return api.post<Expense>('/expenses', input);
+  },
+  async update(id: string, input: Partial<ExpenseInput>): Promise<Expense> {
+    return api.patch<Expense>(`/expenses/${id}`, input);
   },
   async remove(id: string): Promise<Expense> {
     return api.delete<Expense>(`/expenses/${id}`);

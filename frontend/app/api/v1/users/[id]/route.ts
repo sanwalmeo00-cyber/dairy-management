@@ -15,9 +15,9 @@ export const GET = apiRoute(async (request, { params }) => {
 });
 
 export const PATCH = apiRoute(async (request, { params }) => {
-  requireAuth(request, [Role.SUPER_ADMIN]);
+  const auth = requireAuth(request, [Role.SUPER_ADMIN]);
   const { id } = parseWithSchema<{ id: string }>(userIdParamSchema, await params);
   const body = parseWithSchema<UpdateUserInput>(updateUserSchema, await readJson(request));
-  const user = await usersService.update(id, body);
+  const user = await usersService.update(id, body, auth.userId);
   return jsonSuccess(user, 200, 'User updated');
 });

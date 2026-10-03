@@ -30,16 +30,17 @@ export function Pagination({
         className
       )}
     >
-      <p className="text-sm text-muted-fg">
+      <p className="text-center text-sm text-muted-fg sm:text-left">
         Showing <span className="font-medium text-foreground">{from}</span>–
         <span className="font-medium text-foreground">{to}</span> of{' '}
         <span className="font-medium text-foreground">{total}</span>
       </p>
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:flex">
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="w-full sm:w-auto"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
@@ -48,12 +49,13 @@ export function Pagination({
           Prev
         </Button>
         <span className="min-w-[5.5rem] text-center text-sm text-muted-fg">
-          Page {page} / {totalPages}
+          {page} / {totalPages}
         </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="w-full sm:w-auto"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"

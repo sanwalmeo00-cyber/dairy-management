@@ -76,6 +76,32 @@ function StockInForm() {
 
   if (loading) return <LoadingState label="Loading items…" />;
 
+  if (walletBalance != null && walletBalance <= 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Stock In"
+          description="Stock purchases are taken from the farm wallet."
+        />
+        <Card>
+          <p className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
+            Wallet is empty. Add Money in on the cashbook before stocking in.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/inventory">
+              <Button type="button" variant="outline">
+                Back
+              </Button>
+            </Link>
+            <Link href="/cashbook/new?type=sale">
+              <Button type="button">Go to Cashbook</Button>
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -97,11 +123,6 @@ function StockInForm() {
           </p>
         ) : (
           <form onSubmit={(e) => void handleSubmit(e)} className="grid gap-4 sm:grid-cols-2">
-            {walletBalance != null && walletBalance <= 0 && (
-              <p className="sm:col-span-2 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-                Wallet is empty. Add Money in on the cashbook before stocking in.
-              </p>
-            )}
             <Select
               name="itemId"
               label="Item"

@@ -1,7 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Button } from './Button';
 
 interface ModalProps {
@@ -13,6 +13,24 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -23,14 +41,20 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-xl border border-border bg-card shadow-xl sm:rounded-xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="relative z-10 flex max-h-[min(92vh,100dvh)] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-card shadow-xl sm:rounded-xl pb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border sm:hidden" aria-hidden />
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5 sm:py-4">
-          <h3 className="text-base font-semibold sm:text-lg">{title}</h3>
+          <h3 className="pr-2 text-base font-semibold sm:text-lg">{title}</h3>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div className="overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
         {footer && (
           <div className="shrink-0 border-t border-border px-4 py-3 sm:px-5 sm:py-4">
             {footer}
