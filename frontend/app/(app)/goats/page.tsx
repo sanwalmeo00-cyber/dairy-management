@@ -21,6 +21,7 @@ import {
   LoadingState,
   Pagination,
 } from '@/components/ui';
+import { ANIMAL_TYPE_OPTIONS } from '@/lib/animalType';
 import { formatCurrency, formatAgeMonths } from '@/lib/format';
 
 const PAGE_SIZE = 10;
@@ -31,6 +32,7 @@ export default function GoatsPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<Goat[]>([]);
   const [search, setSearch] = useState('');
+  const [animalType, setAnimalType] = useState('');
   const [gender, setGender] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -56,11 +58,12 @@ export default function GoatsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, gender, status]);
+  }, [search, animalType, gender, status]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return rows.filter((g) => {
+      if (animalType && (g.animalType || 'Goat') !== animalType) return false;
       if (gender && g.gender !== gender) return false;
       if (status) {
         const gStatus = g.status === 'Active' ? 'Healthy' : g.status;
@@ -69,7 +72,7 @@ export default function GoatsPage() {
       if (!q) return true;
       return g.tagNumber.toLowerCase().includes(q) || g.breed.toLowerCase().includes(q);
     });
-  }, [rows, search, gender, status]);
+  }, [rows, search, animalType, gender, status]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -112,6 +115,13 @@ export default function GoatsPage() {
           onChange={setSearch}
           placeholder="Search tag, breed…"
           className="sm:max-w-xs"
+        />
+        <Select
+          options={[...ANIMAL_TYPE_OPTIONS]}
+          placeholder="All types"
+          value={animalType}
+          onChange={(e) => setAnimalType(e.target.value)}
+          className="sm:w-40"
         />
         <Select
           options={[
@@ -167,6 +177,11 @@ export default function GoatsPage() {
                   ),
               },
               { key: 'tag', header: 'Tag', render: (g) => g.tagNumber },
+              {
+                key: 'type',
+                header: 'Type',
+                render: (g) => g.animalType || 'Goat',
+              },
               { key: 'breed', header: 'Breed', render: (g) => g.breed },
               { key: 'gender', header: 'Gender', render: (g) => g.gender },
               {

@@ -18,8 +18,10 @@ import {
   LoadingState,
 } from '@/components/ui';
 import type { VaccinationStatus } from '@/types/farm';
+import { ANIMAL_TYPE_OPTIONS } from '@/lib/animalType';
 import { GOAT_STATUS_OPTIONS } from '@/lib/goatStatus';
 import { dobFromAgeMonths, formatCurrency } from '@/lib/format';
+import type { AnimalType } from '@/types/farm';
 
 export default function NewGoatPage() {
   const router = useRouter();
@@ -69,6 +71,7 @@ export default function NewGoatPage() {
     try {
       await goatsService.create({
         tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+        animalType: String(fd.get('animalType') || 'Goat') as AnimalType,
         breed: String(fd.get('breed') ?? '').trim(),
         gender: String(fd.get('gender')) as 'Male' | 'Female',
         dateOfBirth,
@@ -142,6 +145,14 @@ export default function NewGoatPage() {
             <ImageUpload folder="goats" value={imageUrl} onChange={setImageUrl} disabled={saving} />
           </div>
           <Input name="tagNumber" label="Tag Number" required disabled={saving} />
+          <Select
+            name="animalType"
+            label="Animal type"
+            required
+            disabled={saving}
+            defaultValue="Goat"
+            options={[...ANIMAL_TYPE_OPTIONS]}
+          />
           <Input name="breed" label="Breed" required disabled={saving} />
           <Select
             name="gender"

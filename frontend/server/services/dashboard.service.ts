@@ -1,14 +1,10 @@
 import prisma from '../database/prisma';
 import { cacheDelPrefix, cacheGet, cacheSet } from '../utils/cache';
 import { isOnFarmStatus } from '@/lib/goatStatus';
+import { isAnimalSale } from '@/lib/cashbookMarkers';
 
-export const DASHBOARD_CACHE_KEY = 'dashboard:overview:v3';
+export const DASHBOARD_CACHE_KEY = 'dashboard:overview:v5';
 const CACHE_TTL_MS = 45_000;
-
-/** Real animal sales — not partner “Money in” investment rows. */
-function isAnimalSale(r: { goatId?: string | null; tagNumber?: string | null }) {
-  return Boolean(r.goatId) || Boolean(r.tagNumber && r.tagNumber !== '—');
-}
 
 /** Farm cost expense — exclude partner cash-out (capital return, not farm cost). */
 function isFarmExpense(r: { category?: string | null }) {
@@ -58,6 +54,7 @@ async function buildDashboard() {
     sales,
     expenses,
     purchases,
+    milkRecords,
     inventoryItems,
     recentBreedings,
     recentPayments,
@@ -87,6 +84,7 @@ async function buildDashboard() {
         createdAt: true,
         tagNumber: true,
         goatId: true,
+        notes: true,
       },
     }),
     prisma.expense.findMany({
@@ -103,6 +101,10 @@ async function buildDashboard() {
     prisma.goatPurchase.findMany({
       where: { deletedAt: null },
       select: { id: true, purchasePrice: true, date: true, createdAt: true, tagNumber: true },
+    }),
+    prisma.milkRecord.findMany({
+      where: { deletedAt: null },
+      select: { id: true, quantityKg: true, date: true, createdAt: true, session: true },
     }),
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },
@@ -143,6 +145,17 @@ async function buildDashboard() {
     (i) => Number(i.currentStock) <= 0 || Number(i.currentStock) < Number(i.minimumStock)
   ).length;
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  const milkTodayKg = milkRecords
+    .filter((r) => r.date >= todayStart && r.date <= todayEnd)
+    .reduce((s, r) => s + Number(r.quantityKg), 0);
+  const milkMonthKg = milkRecords
+    .filter((r) => r.date >= months[months.length - 1].start && r.date <= months[months.length - 1].end)
+    .reduce((s, r) => s + Number(r.quantityKg), 0);
+
   const salesVsExpenses = months.map((m) => {
     const monthSales = animalSales
       .filter((r) => r.date >= m.start && r.date <= m.end)
@@ -154,6 +167,13 @@ async function buildDashboard() {
       .filter((r) => r.date >= m.start && r.date <= m.end)
       .reduce((s, r) => s + Number(r.amount), 0);
     return { month: m.label, sales: monthSales, expenses: monthPurchases + monthExpenses };
+  });
+
+  const milkByMonth = months.map((m) => {
+    const kg = milkRecords
+      .filter((r) => r.date >= m.start && r.date <= m.end)
+      .reduce((s, r) => s + Number(r.quantityKg), 0);
+    return { month: m.label, kg };
   });
 
   // Population uses createdAt/DOB vs month end — no extra query
@@ -189,6 +209,9 @@ async function buildDashboard() {
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 5);
   const recentPurchases = [...purchases]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 5);
+  const recentMilk = [...milkRecords]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 5);
 
@@ -243,6 +266,13 @@ async function buildDashboard() {
       type: 'inventory',
       at: t.createdAt,
     })),
+    ...recentMilk.map((m) => ({
+      id: `milk-${m.id}`,
+      message: `Milk recorded · ${Number(m.quantityKg)} kg (${m.session})`,
+      timeAgo: timeAgo(m.createdAt),
+      type: 'milk',
+      at: m.createdAt,
+    })),
   ];
 
   const activities = rawActivities
@@ -259,6 +289,8 @@ async function buildDashboard() {
       totalExpenses,
       profitOrLoss,
       lowStockItems,
+      milkTodayKg,
+      milkMonthKg,
     },
     charts: {
       salesVsExpenses,
@@ -266,6 +298,7 @@ async function buildDashboard() {
       gender,
       status,
       breeds,
+      milkByMonth,
     },
     activities,
     cachedAt: new Date().toISOString(),

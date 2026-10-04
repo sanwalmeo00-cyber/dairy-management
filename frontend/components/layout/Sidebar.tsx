@@ -10,6 +10,7 @@ import {
   Package,
   Settings,
   UserCog,
+  Milk,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -32,6 +33,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/goats', label: 'Animals', icon: Rabbit },
         { href: '/kids', label: 'Kids', icon: Baby },
+        { href: '/milk', label: 'Milk', icon: Milk },
       ],
     },
     {

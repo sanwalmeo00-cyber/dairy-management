@@ -28,9 +28,22 @@ import {
   Textarea,
 } from '@/components/ui';
 import { formatCurrency, formatDate } from '@/lib/format';
+import {
+  isAnimalSale,
+  isMilkSale,
+  MILK_SALE_NOTE_PREFIX,
+  MILK_SALE_TAG,
+  milkSaleNotes,
+} from '@/lib/cashbookMarkers';
 import { usePagedList } from '@/lib/usePagedList';
 
-export type CashbookKind = 'sale' | 'animalsale' | 'purchase' | 'expense' | 'cashout';
+export type CashbookKind =
+  | 'sale'
+  | 'milksale'
+  | 'animalsale'
+  | 'purchase'
+  | 'expense'
+  | 'cashout';
 
 type CashbookEntry = {
   id: string;
@@ -51,8 +64,10 @@ type CashbookEntry = {
   tagNumber?: string;
 };
 
-function isAnimalSale(r: Sale) {
-  return Boolean(r.goatId) || Boolean(r.tagNumber && r.tagNumber !== '—');
+function saleKind(r: Sale): CashbookKind {
+  if (isMilkSale(r)) return 'milksale';
+  if (isAnimalSale(r)) return 'animalsale';
+  return 'sale';
 }
 
 function toEntries(
@@ -62,14 +77,17 @@ function toEntries(
 ): CashbookEntry[] {
   return [
     ...sales.map((r) => {
-      const animal = isAnimalSale(r);
+      const kind = saleKind(r);
       return {
         id: `sale-${r.id}`,
-        kind: (animal ? 'animalsale' : 'sale') as CashbookKind,
+        kind,
         date: r.date,
-        description: animal
-          ? `Animal sale · tag ${r.tagNumber}`
-          : `Money in · ${r.buyer}`,
+        description:
+          kind === 'animalsale'
+            ? `Animal sale · tag ${r.tagNumber}`
+            : kind === 'milksale'
+              ? `Milk sale · ${r.buyer}`
+              : `Money in · ${r.buyer}`,
         notes: r.notes ?? null,
         party: r.buyer,
         amount: r.salePrice,
@@ -124,6 +142,7 @@ function toEntries(
 
 const KIND_LABEL: Record<CashbookKind, string> = {
   sale: 'Money in',
+  milksale: 'Milk sale',
   animalsale: 'Animal sale',
   purchase: 'Purchase',
   expense: 'Expense',
@@ -147,7 +166,22 @@ function rawRecordId(entry: CashbookEntry) {
 }
 
 function isSaleKind(kind: CashbookKind) {
-  return kind === 'sale' || kind === 'animalsale';
+  return kind === 'sale' || kind === 'animalsale' || kind === 'milksale';
+}
+
+function stripMilkSaleNotes(notes?: string | null) {
+  if (!notes) return '';
+  const lines = notes.split('\n');
+  if (lines[0]?.startsWith(MILK_SALE_NOTE_PREFIX)) {
+    return lines.slice(1).join('\n').trim();
+  }
+  return notes;
+}
+
+function milkKgFromNotes(notes?: string | null): string {
+  if (!notes) return '';
+  const m = notes.match(/^Milk sale · ([\d.]+) kg/);
+  return m?.[1] ?? '';
 }
 
 export default function CashbookPage() {
@@ -170,6 +204,7 @@ export default function CashbookPage() {
   const [editParty, setEditParty] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editTag, setEditTag] = useState('');
+  const [editMilkKg, setEditMilkKg] = useState('');
   const [editCategory, setEditCategory] = useState('Other');
 
   const load = async () => {
@@ -240,7 +275,7 @@ export default function CashbookPage() {
   const wallet = moneyIn - moneyOut;
 
   const businessIncome = filtered
-    .filter((r) => r.kind === 'animalsale')
+    .filter((r) => r.kind === 'animalsale' || r.kind === 'milksale')
     .reduce((s, r) => s + r.amount, 0);
   const businessCosts = filtered
     .filter((r) => r.kind === 'purchase' || r.kind === 'expense')
@@ -256,8 +291,15 @@ export default function CashbookPage() {
     setEditDate(entry.date);
     setEditAmount(String(entry.amount));
     setEditParty(entry.party);
-    setEditNotes(entry.notes ?? '');
-    setEditTag(entry.tagNumber && entry.tagNumber !== '—' ? entry.tagNumber : '');
+    setEditNotes(
+      entry.kind === 'milksale' ? stripMilkSaleNotes(entry.notes) : (entry.notes ?? '')
+    );
+    setEditMilkKg(entry.kind === 'milksale' ? milkKgFromNotes(entry.notes) : '');
+    setEditTag(
+      entry.tagNumber && entry.tagNumber !== '—' && entry.tagNumber !== MILK_SALE_TAG
+        ? entry.tagNumber
+        : ''
+    );
     setEditCategory(
       entry.kind === 'expense' && entry.category && entry.category !== 'Partner Payout'
         ? entry.category
@@ -317,14 +359,25 @@ export default function CashbookPage() {
     setSaving(true);
     try {
       if (isSaleKind(detail.kind)) {
+        const kg = editMilkKg.trim() ? Number(editMilkKg) : null;
+        if (detail.kind === 'milksale' && editMilkKg.trim() && (!(kg! > 0) || Number.isNaN(kg))) {
+          toast('Enter a valid milk quantity in kg', 'error');
+          setSaving(false);
+          return;
+        }
         const updated = await salesService.update(rawId, {
           date: editDate,
           salePrice: amount,
           buyer: editParty.trim() || detail.party,
           ...(detail.kind === 'animalsale'
             ? { tagNumber: editTag.trim() || detail.tagNumber || '—' }
-            : { tagNumber: null }),
-          notes: editNotes.trim() || null,
+            : detail.kind === 'milksale'
+              ? { tagNumber: MILK_SALE_TAG }
+              : { tagNumber: null }),
+          notes:
+            detail.kind === 'milksale'
+              ? milkSaleNotes(kg, editNotes)
+              : editNotes.trim() || null,
         });
         setSales((prev) => prev.map((r) => (r.id === rawId ? updated : r)));
       } else if (detail.kind === 'purchase') {
@@ -413,6 +466,7 @@ export default function CashbookPage() {
         <Select
           options={[
             { label: 'Money in', value: 'sale' },
+            { label: 'Milk sale', value: 'milksale' },
             { label: 'Animal sale', value: 'animalsale' },
             { label: 'Cash out', value: 'cashout' },
             { label: 'Purchases', value: 'purchase' },
@@ -454,7 +508,7 @@ export default function CashbookPage() {
                 render: (r) => (
                   <Badge
                     tone={
-                      r.kind === 'sale' || r.kind === 'animalsale'
+                      r.kind === 'sale' || r.kind === 'animalsale' || r.kind === 'milksale'
                         ? 'success'
                         : r.kind === 'cashout'
                           ? 'danger'
@@ -630,6 +684,26 @@ export default function CashbookPage() {
                 disabled={saving}
                 onChange={(e) => setEditParty(e.target.value)}
               />
+            )}
+            {detail.kind === 'milksale' && (
+              <>
+                <Input
+                  label="Sold to"
+                  required
+                  value={editParty}
+                  disabled={saving}
+                  onChange={(e) => setEditParty(e.target.value)}
+                />
+                <Input
+                  label="Milk sold (kg)"
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  value={editMilkKg}
+                  disabled={saving}
+                  onChange={(e) => setEditMilkKg(e.target.value)}
+                />
+              </>
             )}
             {detail.kind === 'animalsale' && (
               <Input

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Rabbit, Baby, TrendingUp, Wallet, Scale, Plus } from 'lucide-react';
+import { Rabbit, Baby, TrendingUp, Wallet, Scale, Plus, Milk } from 'lucide-react';
 import { dashboardService, type DashboardData } from '@/services/dashboard';
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, StatCard, Card, Button, LoadingState } from '@/components/ui';
@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const quickActions = [
     { label: 'Add Animal', href: '/goats/new' },
     { label: 'Record Birth', href: '/kids/new' },
+    { label: 'Record Milk', href: '/milk' },
     { label: 'Record Sale', href: '/cashbook/new?type=sale' },
     { label: 'Add Expense', href: '/cashbook/new?type=expense' },
     { label: 'Stock In', href: '/inventory/stock-in' },
@@ -90,6 +91,12 @@ export default function DashboardPage() {
           icon={<Rabbit className="h-5 w-5" />}
         />
         <StatCard label="Kids" value={String(stats.kids)} icon={<Baby className="h-5 w-5" />} />
+        <StatCard
+          label="Milk today"
+          value={`${Number(stats.milkTodayKg ?? 0).toLocaleString()} kg`}
+          hint={`This month: ${Number(stats.milkMonthKg ?? 0).toLocaleString()} kg`}
+          icon={<Milk className="h-5 w-5" />}
+        />
         <StatCard
           label="Animal Sales"
           value={formatCurrency(stats.totalSales)}

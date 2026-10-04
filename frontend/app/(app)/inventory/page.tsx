@@ -66,8 +66,11 @@ export default function InventoryPage() {
     `${search}|${category}`
   );
 
-  const inStock = rows.filter((i) => i.currentStock > 0).length;
-  const outCount = rows.filter((i) => i.currentStock <= 0).length;
+  const inStock = rows.filter((i) => i.status === 'In Stock' && i.currentStock > 0).length;
+  const expiredCount = rows.filter((i) => i.status === 'Expired' || i.expiryStatus === 'Expired').length;
+  const outCount = rows.filter(
+    (i) => i.status !== 'In Stock' && i.status !== 'Expired' && i.currentStock <= 0
+  ).length;
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -101,10 +104,11 @@ export default function InventoryPage() {
         </Link>
       </PageHeader>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total items" value={String(rows.length)} />
         <StatCard label="In stock" value={String(inStock)} />
         <StatCard label="Out of stock" value={String(outCount)} />
+        <StatCard label="Expired" value={String(expiredCount)} />
       </div>
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -144,6 +148,21 @@ export default function InventoryPage() {
                 key: 'stock',
                 header: 'Stock',
                 render: (i) => `${i.currentStock} ${i.unit}`,
+              },
+              {
+                key: 'expiry',
+                header: 'Expires',
+                render: (i) =>
+                  i.expiryDate ? (
+                    <span className="inline-flex flex-col gap-0.5">
+                      <span>{i.expiryDate}</span>
+                      {i.expiryStatus && i.expiryStatus !== 'Ok' ? (
+                        <Badge tone={statusTone(i.expiryStatus)}>{i.expiryStatus}</Badge>
+                      ) : null}
+                    </span>
+                  ) : (
+                    '—'
+                  ),
               },
               {
                 key: 'status',

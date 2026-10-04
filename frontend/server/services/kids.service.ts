@@ -3,6 +3,7 @@ import prisma from '../database/prisma';
 import { ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
 import { invalidateAppCaches } from '../utils/invalidate';
 import { CreateKidInput, UpdateKidInput } from '../validators/kids.validator';
+import { normalizeAnimalType } from '@/lib/animalType';
 import { healthFromGoatStatus, normalizeGoatStatus } from '@/lib/goatStatus';
 import { hardDeleteGoatInTx } from './goats.service';
 
@@ -120,6 +121,7 @@ export class KidsService {
         data: {
           tagNumber,
           name: input.name,
+          animalType: normalizeAnimalType(mother.animalType),
           breed: mother.breed,
           gender: input.gender,
           dateOfBirth: new Date(input.dateOfBirth),

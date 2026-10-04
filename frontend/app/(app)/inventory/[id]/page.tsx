@@ -93,6 +93,19 @@ export default function InventoryDetailPage() {
               <Badge tone={statusTone(item.status)}>{item.status}</Badge>
             </dd>
           </div>
+          {item.expiryDate && (
+            <div>
+              <dt className="text-muted-fg">Expiration date</dt>
+              <dd className="font-medium">
+                {item.expiryDate}
+                {item.expiryStatus && item.expiryStatus !== 'Ok' ? (
+                  <span className="ml-2">
+                    <Badge tone={statusTone(item.expiryStatus)}>{item.expiryStatus}</Badge>
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-muted-fg">Total spent</dt>
             <dd className="font-semibold">{formatCurrency(totalSpent)}</dd>

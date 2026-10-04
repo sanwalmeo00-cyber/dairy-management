@@ -47,7 +47,7 @@ export type InventoryCategory =
   | 'Equipment'
   | 'Other Supplies';
 
-export type StockStatus = 'In Stock' | 'Low Stock' | 'Out of Stock';
+export type StockStatus = 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Expired';
 export type TransactionType = 'Income' | 'Expense';
 
 export interface SoftDeletable {
@@ -79,10 +79,13 @@ export interface User {
   status?: 'Active' | 'Inactive';
 }
 
+export type AnimalType = 'Goat' | 'Cow' | 'Buffalo';
+
 export interface Goat extends OwnedRecord {
   id: string;
   tagNumber: string;
   name?: string;
+  animalType: AnimalType;
   breed: string;
   gender: GoatGender;
   dateOfBirth: string;
@@ -255,11 +258,24 @@ export interface InventoryTransaction extends OwnedRecord {
   updatedAt?: string;
 }
 
+export type MilkSession = 'Morning' | 'Evening' | 'Combined';
+
+export interface MilkRecord extends OwnedRecord {
+  id: string;
+  date: string;
+  /** Milk quantity in kilograms */
+  quantityKg: number;
+  session: MilkSession;
+  goatId?: string;
+  tagNumber?: string;
+  notes?: string;
+}
+
 export interface ActivityItem {
   id: string;
   message: string;
   timeAgo: string;
-  type: 'goat' | 'sale' | 'expense' | 'payment' | 'breeding' | 'inventory';
+  type: 'goat' | 'sale' | 'expense' | 'payment' | 'breeding' | 'inventory' | 'milk';
 }
 
 export interface FarmSettings {

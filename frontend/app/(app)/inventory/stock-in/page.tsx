@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { inventoryService } from '@/services/inventory';
 import { walletService } from '@/services/finance';
 import { useToast } from '@/context/ToastContext';
@@ -16,13 +16,15 @@ import {
   LoadingState,
 } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
+import { isExpirableCategory } from '@/lib/inventoryExpiry';
+import type { InventoryItem } from '@/types/farm';
 
 function StockInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const preselect = searchParams.get('item') ?? '';
-  const [options, setOptions] = useState<{ label: string; value: string }[]>([]);
+  const [items, setItems] = useState<InventoryItem[]>([]);
   const [itemId, setItemId] = useState(preselect);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -30,15 +32,22 @@ function StockInForm() {
 
   useEffect(() => {
     void Promise.all([inventoryService.getAll(), walletService.getBalance().catch(() => null)])
-      .then(([items, balance]) => {
-        setOptions(items.map((i) => ({ label: `${i.name} (${i.unit})`, value: i.id })));
+      .then(([list, balance]) => {
+        setItems(list);
         if (balance != null) setWalletBalance(balance);
-        if (preselect && items.some((i) => i.id === preselect)) setItemId(preselect);
-        else if (items.length && !preselect) setItemId(items[0].id);
+        if (preselect && list.some((i) => i.id === preselect)) setItemId(preselect);
+        else if (list.length && !preselect) setItemId(list[0].id);
       })
       .catch((err) => toast(err instanceof Error ? err.message : 'Failed to load items', 'error'))
       .finally(() => setLoading(false));
   }, [toast, preselect]);
+
+  const options = useMemo(
+    () => items.map((i) => ({ label: `${i.name} (${i.unit})`, value: i.id })),
+    [items]
+  );
+  const selected = items.find((i) => i.id === itemId);
+  const needsExpiry = selected ? isExpirableCategory(selected.category) : false;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -47,8 +56,13 @@ function StockInForm() {
     const selectedId = String(fd.get('itemId') || itemId);
     const quantity = Number(fd.get('quantity'));
     const cost = Number(fd.get('cost'));
+    const expiryDate = String(fd.get('expiryDate') ?? '').trim() || null;
     if (!(cost > 0)) {
       toast('Enter the total purchase price', 'error');
+      return;
+    }
+    if (needsExpiry && !expiryDate) {
+      toast('Expiration date is required for medicine and vaccines', 'error');
       return;
     }
     if (walletBalance != null && walletBalance < cost) {
@@ -64,6 +78,7 @@ function StockInForm() {
         date: String(fd.get('date')),
         quantity,
         cost,
+        expiryDate,
         notes: String(fd.get('notes') ?? '') || null,
       });
       toast(`Stock in saved — ${formatCurrency(cost)} posted to cashbook`);
@@ -159,6 +174,19 @@ function StockInForm() {
               disabled={saving}
               hint="Full amount paid for this delivery — not unit price"
             />
+            {needsExpiry && (
+              <Input
+                key={`expiry-${itemId}`}
+                name="expiryDate"
+                label="Expiration date"
+                type="date"
+                required
+                disabled={saving}
+                defaultValue={selected?.expiryDate}
+                className="sm:col-span-2"
+                hint="After this date, remaining stock is removed from in-stock automatically"
+              />
+            )}
             <div className="sm:col-span-2">
               <Textarea name="notes" label="Notes" rows={3} disabled={saving} />
             </div>

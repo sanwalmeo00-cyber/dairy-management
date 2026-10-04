@@ -35,6 +35,7 @@ async function wipeAll() {
   await prisma.expense.deleteMany();
   await prisma.sale.deleteMany();
   await prisma.goatPurchase.deleteMany();
+  await prisma.milkRecord.deleteMany();
   await prisma.kid.deleteMany();
   await prisma.breeding.deleteMany();
   await prisma.goat.updateMany({ data: { fatherId: null, motherId: null } });

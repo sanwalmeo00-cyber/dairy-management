@@ -8,6 +8,11 @@ import {
   UpdateInventoryItemInput,
 } from '../validators/inventory.validator';
 import { paymentMethodFromAccount, WALLET_ACCOUNT } from '@/lib/moneyAccount';
+import {
+  deriveExpiryStatus,
+  isExpirableCategory,
+  isPastExpiry,
+} from '@/lib/inventoryExpiry';
 import { setRecordAccount } from '../utils/account';
 import { assertWalletCanSpend } from '../utils/wallet';
 import { invalidateAppCaches } from '../utils/invalidate';
@@ -42,7 +47,13 @@ function expenseCategoryForInventory(category: string): string {
   }
 }
 
-function deriveStatus(currentStock: number) {
+function deriveStatus(
+  currentStock: number,
+  category: string,
+  expiryDate?: Date | string | null
+) {
+  const expiryStatus = deriveExpiryStatus(category, expiryDate);
+  if (expiryStatus === 'Expired') return 'Expired';
   if (currentStock <= 0) return 'Out of Stock';
   return 'In Stock';
 }
@@ -51,6 +62,8 @@ function serializeItem(row: ItemRow) {
   const currentStock = Number(row.currentStock);
   const minimumStock = Number(row.minimumStock);
   const dailyUsage = row.dailyUsage != null ? Number(row.dailyUsage) : null;
+  const expiryDate = row.expiryDate ? row.expiryDate.toISOString().slice(0, 10) : undefined;
+  const expiryStatus = deriveExpiryStatus(row.category, row.expiryDate);
 
   return {
     id: row.id,
@@ -63,11 +76,11 @@ function serializeItem(row: ItemRow) {
     dailyUsage: dailyUsage ?? undefined,
     daysLeft:
       dailyUsage != null && dailyUsage > 0 ? Math.floor(currentStock / dailyUsage) : null,
-    expiryDate: row.expiryDate ? row.expiryDate.toISOString().slice(0, 10) : undefined,
-    expiryStatus: undefined as string | undefined,
+    expiryDate,
+    expiryStatus,
     supplier: row.supplier ?? undefined,
     notes: row.notes ?? undefined,
-    status: deriveStatus(currentStock),
+    status: deriveStatus(currentStock, row.category, row.expiryDate),
     ownerId: row.ownerId,
     ownerName: row.owner.name,
     deletedAt: row.deletedAt?.toISOString() ?? null,
@@ -104,6 +117,43 @@ function assertCanModify(ownerId: string, userId: string, role: Role) {
   }
 }
 
+/**
+ * When medicine/vaccine is past expiry, zero usable stock and log a stock-out.
+ * Returns refreshed row (with owner) after purge, or the original if nothing changed.
+ */
+async function purgeExpiredStock(row: ItemRow): Promise<ItemRow> {
+  if (!isExpirableCategory(row.category)) return row;
+  if (!isPastExpiry(row.expiryDate)) return row;
+  const qty = Number(row.currentStock);
+  if (!(qty > 0)) return row;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.inventoryItem.update({
+      where: { id: row.id },
+      data: { currentStock: 0 },
+    });
+    await tx.inventoryTransaction.create({
+      data: {
+        itemId: row.id,
+        date: new Date(),
+        quantity: qty,
+        direction: 'out',
+        reason: 'Expired',
+        notes: `Removed from stock — expired on ${row.expiryDate!.toISOString().slice(0, 10)}`,
+        ownerId: row.ownerId,
+      },
+    });
+  });
+
+  invalidateAppCaches();
+
+  const refreshed = await prisma.inventoryItem.findFirst({
+    where: { id: row.id, deletedAt: null },
+    include: ownerInclude,
+  });
+  return refreshed ?? { ...row, currentStock: 0 as unknown as ItemRow['currentStock'] };
+}
+
 export class InventoryService {
   async findAll() {
     const rows = await prisma.inventoryItem.findMany({
@@ -111,7 +161,8 @@ export class InventoryService {
       include: ownerInclude,
       orderBy: { name: 'asc' },
     });
-    return rows.map(serializeItem);
+    const purged = await Promise.all(rows.map((row) => purgeExpiredStock(row)));
+    return purged.map(serializeItem);
   }
 
   async findById(id: string) {
@@ -120,10 +171,18 @@ export class InventoryService {
       include: ownerInclude,
     });
     if (!row) throw new NotFoundError('Inventory item not found');
-    return serializeItem(row);
+    return serializeItem(await purgeExpiredStock(row));
   }
 
   async create(input: CreateInventoryItemInput, ownerId: string) {
+    if (
+      isExpirableCategory(input.category) &&
+      input.expiryDate &&
+      isPastExpiry(input.expiryDate)
+    ) {
+      throw new ValidationError('Expiration date must be today or in the future');
+    }
+
     const row = await prisma.inventoryItem.create({
       data: {
         name: input.name.trim(),
@@ -148,6 +207,21 @@ export class InventoryService {
     if (!existing) throw new NotFoundError('Inventory item not found');
     assertCanModify(existing.ownerId, userId, role);
 
+    const nextCategory = input.category ?? existing.category;
+    const nextExpiry =
+      input.expiryDate !== undefined
+        ? input.expiryDate
+        : existing.expiryDate
+          ? existing.expiryDate.toISOString().slice(0, 10)
+          : null;
+
+    if (isExpirableCategory(nextCategory) && !nextExpiry) {
+      throw new ValidationError('Expiration date is required for medicine and vaccines');
+    }
+    if (nextExpiry && isExpirableCategory(nextCategory) && isPastExpiry(nextExpiry)) {
+      throw new ValidationError('Expiration date must be today or in the future');
+    }
+
     const row = await prisma.inventoryItem.update({
       where: { id },
       data: {
@@ -166,7 +240,7 @@ export class InventoryService {
       },
       include: ownerInclude,
     });
-    return serializeItem(row);
+    return serializeItem(await purgeExpiredStock(row));
   }
 
   async remove(id: string, userId: string, role: Role) {
@@ -199,19 +273,37 @@ export class InventoryService {
   }
 
   async stockIn(id: string, input: StockInInput, ownerId: string, role: Role) {
-    const existing = await prisma.inventoryItem.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.inventoryItem.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Inventory item not found');
     assertCanModify(existing.ownerId, ownerId, role);
+
+    if (isExpirableCategory(existing.category)) {
+      if (!input.expiryDate) {
+        throw new ValidationError('Expiration date is required for medicine and vaccines');
+      }
+      if (isPastExpiry(input.expiryDate)) {
+        throw new ValidationError('Expiration date must be today or in the future');
+      }
+    }
 
     await assertWalletCanSpend(input.cost, 'this inventory purchase');
 
     const paymentMethod = paymentMethodFromAccount(WALLET_ACCOUNT);
+
+    // Clear any leftover expired stock before adding a fresh batch
+    await purgeExpiredStock(existing);
 
     const txn = await prisma.$transaction(async (tx) => {
       await tx.inventoryItem.update({
         where: { id },
         data: {
           currentStock: { increment: input.quantity },
+          ...(input.expiryDate
+            ? { expiryDate: new Date(input.expiryDate) }
+            : {}),
           ...(input.supplier != null && input.supplier !== ''
             ? { supplier: input.supplier }
             : {}),
@@ -257,14 +349,27 @@ export class InventoryService {
   }
 
   async stockOut(id: string, input: StockOutInput, ownerId: string, role: Role) {
-    const existing = await prisma.inventoryItem.findFirst({ where: { id, deletedAt: null } });
+    const existing = await prisma.inventoryItem.findFirst({
+      where: { id, deletedAt: null },
+      include: ownerInclude,
+    });
     if (!existing) throw new NotFoundError('Inventory item not found');
     assertCanModify(existing.ownerId, ownerId, role);
 
-    const current = Number(existing.currentStock);
+    const purged = await purgeExpiredStock(existing);
+    if (
+      isExpirableCategory(purged.category) &&
+      isPastExpiry(purged.expiryDate)
+    ) {
+      throw new ValidationError(
+        'This medicine/vaccine has expired and was removed from stock. Stock in a new batch with a valid expiry date.'
+      );
+    }
+
+    const current = Number(purged.currentStock);
     if (input.quantity > current) {
       throw new ValidationError(
-        `Insufficient stock. Available: ${current} ${existing.unit}`
+        `Insufficient stock. Available: ${current} ${purged.unit}`
       );
     }
 

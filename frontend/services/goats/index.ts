@@ -4,6 +4,7 @@ import type { MoneyAccount } from '@/lib/moneyAccount';
 
 export type GoatInput = {
   tagNumber: string;
+  animalType: 'Goat' | 'Cow' | 'Buffalo';
   breed: string;
   gender: 'Male' | 'Female';
   dateOfBirth: string;

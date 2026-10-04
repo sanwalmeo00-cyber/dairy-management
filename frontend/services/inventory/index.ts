@@ -19,6 +19,8 @@ export type StockInInput = {
   quantity: number;
   /** Total purchase price for this delivery (Rs.). */
   cost: number;
+  /** Required for Medicine/Vaccines — updates item expiry. */
+  expiryDate?: string | null;
   supplier?: string | null;
   reason?: string | null;
   notes?: string | null;

@@ -18,12 +18,14 @@ import {
   Modal,
   LoadingState,
 } from '@/components/ui';
-import type { Goat, VaccinationStatus } from '@/types/farm';
+import type { AnimalType, Goat, VaccinationStatus } from '@/types/farm';
+import { ANIMAL_TYPE_OPTIONS } from '@/lib/animalType';
 import { GOAT_STATUS_OPTIONS, normalizeGoatStatus } from '@/lib/goatStatus';
 import { ageMonthsFromDob, dobFromAgeMonths } from '@/lib/format';
 
 type PendingPayload = {
   tagNumber: string;
+  animalType: AnimalType;
   breed: string;
   gender: 'Male' | 'Female';
   dateOfBirth: string;
@@ -126,6 +128,7 @@ export default function EditGoatPage() {
     }
     const payload: PendingPayload = {
       tagNumber: String(fd.get('tagNumber') ?? '').trim(),
+      animalType: String(fd.get('animalType') || goat.animalType || 'Goat') as AnimalType,
       breed: String(fd.get('breed') ?? '').trim(),
       gender: String(fd.get('gender')) as 'Male' | 'Female',
       dateOfBirth: dobFromAgeMonths(ageMonths),
@@ -185,6 +188,14 @@ export default function EditGoatPage() {
             defaultValue={goat.tagNumber}
             required
             disabled={!canEdit}
+          />
+          <Select
+            name="animalType"
+            label="Animal type"
+            required
+            disabled={!canEdit}
+            defaultValue={goat.animalType || 'Goat'}
+            options={[...ANIMAL_TYPE_OPTIONS]}
           />
           <Input name="breed" label="Breed" defaultValue={goat.breed} required disabled={!canEdit} />
           <Select
