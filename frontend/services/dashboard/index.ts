@@ -9,6 +9,8 @@ export type DashboardStats = {
   totalExpenses: number;
   profitOrLoss: number;
   lowStockItems: number;
+  milkTodayKg: number;
+  milkMonthKg: number;
 };
 
 export type DashboardCharts = {
@@ -17,6 +19,7 @@ export type DashboardCharts = {
   gender: { name: string; value: number }[];
   status: { name: string; value: number }[];
   breeds: { name: string; value: number }[];
+  milkByMonth: { month: string; kg: number }[];
 };
 
 export type DashboardData = {

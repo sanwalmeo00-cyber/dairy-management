@@ -23,7 +23,10 @@ function StockOutForm() {
       .then((items) => {
         setOptions(
           items.map((i) => ({
-            label: `${i.name} (${i.currentStock} ${i.unit})`,
+            label:
+              i.status === 'Expired'
+                ? `${i.name} (expired — 0 ${i.unit})`
+                : `${i.name} (${i.currentStock} ${i.unit})`,
             value: i.id,
           }))
         );

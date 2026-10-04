@@ -152,6 +152,10 @@ export default function GoatDetailPage() {
           <h2 className="mb-3 font-semibold">Identity</h2>
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
+              <dt className="text-muted-fg">Type</dt>
+              <dd>{goat.animalType || 'Goat'}</dd>
+            </div>
+            <div>
               <dt className="text-muted-fg">Gender</dt>
               <dd>{goat.gender}</dd>
             </div>

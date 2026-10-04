@@ -1,7 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaLibSql } from '@prisma/adapter-libsql';
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+/** Bump when Prisma models change so hot-reload drops a stale client. */
+const PRISMA_CLIENT_REV = 6;
+
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  prismaRev?: number;
+};
 
 function tursoHttpUrl(raw: string): string {
   // Prisma/libSQL HTTP adapter is more reliable with https:// than libsql://
@@ -34,22 +40,37 @@ function createPrismaClient() {
   });
 }
 
+function clientHasMilk(client: PrismaClient) {
+  return Boolean((client as unknown as { milkRecord?: unknown }).milkRecord);
+}
+
 function getPrisma(): PrismaClient {
-  if (!globalForPrisma.prisma) {
+  const stale =
+    !globalForPrisma.prisma ||
+    globalForPrisma.prismaRev !== PRISMA_CLIENT_REV ||
+    !clientHasMilk(globalForPrisma.prisma);
+
+  if (stale) {
+    const prev = globalForPrisma.prisma;
     globalForPrisma.prisma = createPrismaClient();
+    globalForPrisma.prismaRev = PRISMA_CLIENT_REV;
+    void prev?.$disconnect().catch(() => undefined);
   }
-  return globalForPrisma.prisma;
+
+  return globalForPrisma.prisma!;
 }
 
 /**
  * Lazy proxy so importing API routes during `next build` does not require
  * Turso env vars until a request actually uses the database.
+ * Use the real client as getter receiver so Prisma model delegates resolve.
  */
 export const prisma = new Proxy({} as PrismaClient, {
-  get(_target, prop, receiver) {
+  get(_target, prop) {
+    if (prop === 'then') return undefined;
     const client = getPrisma();
-    const value = Reflect.get(client, prop as string | symbol, receiver);
-    return typeof value === 'function' ? value.bind(client) : value;
+    const value = Reflect.get(client, prop, client);
+    return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(client) : value;
   },
 });
 

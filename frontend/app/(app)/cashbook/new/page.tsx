@@ -14,9 +14,20 @@ import {
 import { useToast } from '@/context/ToastContext';
 import { PageHeader, Card, Input, Select, Textarea, Button, LoadingState } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
+import { MILK_SALE_TAG, milkSaleNotes } from '@/lib/cashbookMarkers';
 import type { ExpenseCategory } from '@/types/farm';
 
-type EntryType = 'sale' | 'cashout' | 'purchase' | 'expense';
+type EntryType = 'sale' | 'milksale' | 'cashout' | 'purchase' | 'expense';
+
+const ENTRY_TYPES: EntryType[] = ['sale', 'milksale', 'cashout', 'purchase', 'expense'];
+
+const ENTRY_TYPE_OPTIONS = [
+  { label: 'Money in (partner invests)', value: 'sale' },
+  { label: 'Milk sale (money in)', value: 'milksale' },
+  { label: 'Cash out (given to partner)', value: 'cashout' },
+  { label: 'Animal purchase (money out)', value: 'purchase' },
+  { label: 'Expense (money out)', value: 'expense' },
+];
 
 function NewCashbookEntryForm() {
   const router = useRouter();
@@ -25,7 +36,7 @@ function NewCashbookEntryForm() {
 
   const initialType = (searchParams.get('type') as EntryType | null) ?? 'sale';
   const [type, setType] = useState<EntryType>(
-    ['sale', 'cashout', 'purchase', 'expense'].includes(initialType) ? initialType : 'sale'
+    ENTRY_TYPES.includes(initialType) ? initialType : 'sale'
   );
   const [saving, setSaving] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -90,6 +101,29 @@ function NewCashbookEntryForm() {
           notes: String(fd.get('notes') ?? '') || null,
         });
         toast('Money in recorded — added to wallet');
+      } else if (type === 'milksale') {
+        const buyer = String(fd.get('buyer') ?? '').trim();
+        if (!buyer) {
+          toast('Enter who bought the milk', 'error');
+          setSaving(false);
+          return;
+        }
+        const kgRaw = String(fd.get('quantityKg') ?? '').trim();
+        const kg = kgRaw ? Number(kgRaw) : null;
+        if (kgRaw && (!(kg! > 0) || Number.isNaN(kg))) {
+          toast('Enter a valid milk quantity in kg', 'error');
+          setSaving(false);
+          return;
+        }
+        await salesService.create({
+          date: String(fd.get('date')),
+          tagNumber: MILK_SALE_TAG,
+          buyer,
+          salePrice: Number(fd.get('salePrice')),
+          paymentStatus: 'Paid',
+          notes: milkSaleNotes(kg, String(fd.get('notes') ?? '')),
+        });
+        toast('Milk sale recorded — added to wallet');
       } else if (type === 'cashout') {
         const toId = String(fd.get('partnerId') || givenToId);
         const toUser = partners.find((p) => p.id === toId);
@@ -167,12 +201,7 @@ function NewCashbookEntryForm() {
             <Select
               label="Entry type"
               required
-              options={[
-                { label: 'Money in (partner invests)', value: 'sale' },
-                { label: 'Cash out (given to partner)', value: 'cashout' },
-                { label: 'Animal purchase (money out)', value: 'purchase' },
-                { label: 'Expense (money out)', value: 'expense' },
-              ]}
+              options={ENTRY_TYPE_OPTIONS}
               value={type}
               onChange={(e) => setType(e.target.value as EntryType)}
             />
@@ -193,12 +222,7 @@ function NewCashbookEntryForm() {
               label="Entry type"
               required
               disabled={saving}
-              options={[
-                { label: 'Money in (partner invests)', value: 'sale' },
-                { label: 'Cash out (given to partner)', value: 'cashout' },
-                { label: 'Animal purchase (money out)', value: 'purchase' },
-                { label: 'Expense (money out)', value: 'expense' },
-              ]}
+              options={ENTRY_TYPE_OPTIONS}
               value={type}
               onChange={(e) => setType(e.target.value as EntryType)}
             />
@@ -236,6 +260,36 @@ function NewCashbookEntryForm() {
                   required
                   disabled={saving}
                   className="sm:col-span-2"
+                />
+              </>
+            )}
+
+            {type === 'milksale' && (
+              <>
+                <Input
+                  name="buyer"
+                  label="Sold to"
+                  required
+                  placeholder="Buyer name"
+                  disabled={saving}
+                  className="sm:col-span-2"
+                />
+                <Input
+                  name="quantityKg"
+                  label="Milk sold (kg)"
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  disabled={saving}
+                  hint="Optional — quantity sold"
+                />
+                <Input
+                  name="salePrice"
+                  label="Amount (Rs.)"
+                  type="number"
+                  required
+                  min={1}
+                  disabled={saving}
                 />
               </>
             )}

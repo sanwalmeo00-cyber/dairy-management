@@ -3,6 +3,7 @@ import { Role } from '@prisma/client';
 import prisma from '../database/prisma';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors';
 import { CreateGoatInput, UpdateGoatInput } from '../validators/goats.validator';
+import { normalizeAnimalType } from '@/lib/animalType';
 import {
   healthFromGoatStatus,
   normalizeGoatStatus,
@@ -35,6 +36,7 @@ function serializeGoat(
     id: goat.id,
     tagNumber: goat.tagNumber,
     name: goat.name ?? undefined,
+    animalType: normalizeAnimalType(goat.animalType),
     breed: goat.breed,
     gender: goat.gender,
     dateOfBirth: goat.dateOfBirth.toISOString().slice(0, 10),
@@ -128,6 +130,7 @@ export class GoatsService {
         data: {
           tagNumber: input.tagNumber,
           name: input.name,
+          animalType: normalizeAnimalType(input.animalType),
           breed: input.breed,
           gender: input.gender,
           dateOfBirth: dob,
@@ -238,6 +241,9 @@ export class GoatsService {
         data: {
           ...(input.tagNumber !== undefined && { tagNumber: input.tagNumber }),
           ...(input.name !== undefined && { name: input.name }),
+          ...(input.animalType !== undefined && {
+            animalType: normalizeAnimalType(input.animalType),
+          }),
           ...(input.breed !== undefined && { breed: input.breed }),
           ...(input.gender !== undefined && { gender: input.gender }),
           ...(input.dateOfBirth !== undefined && { dateOfBirth: new Date(input.dateOfBirth) }),

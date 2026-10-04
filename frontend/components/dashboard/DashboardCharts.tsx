@@ -39,6 +39,23 @@ export function DashboardCharts({ charts }: { charts: DashboardData['charts'] })
         </div>
       </Card>
       <Card>
+        <h2 className="mb-4 font-semibold">Milk Yield (kg)</h2>
+        <div className="h-56 w-full min-w-0 sm:h-64">
+          {(charts.milkByMonth ?? []).every((d) => !d.kg) ? (
+            <p className="text-sm text-muted-fg">No milk records yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.milkByMonth ?? []} margin={{ left: -10, right: 8 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={40} />
+                <Tooltip formatter={(v) => [`${Number(v ?? 0)} kg`, 'Milk']} />
+                <Bar dataKey="kg" fill="#3b82f6" name="Milk (kg)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </Card>
+      <Card>
         <h2 className="mb-4 font-semibold">Population Trend</h2>
         <div className="h-56 w-full min-w-0 sm:h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -57,7 +74,7 @@ export function DashboardCharts({ charts }: { charts: DashboardData['charts'] })
         <h2 className="mb-4 font-semibold">Gender Distribution</h2>
         <div className="h-56 w-full min-w-0 sm:h-64">
           {charts.gender.length === 0 ? (
-            <p className="text-sm text-muted-fg">No goats yet.</p>
+            <p className="text-sm text-muted-fg">No animal yet.</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -85,7 +102,7 @@ export function DashboardCharts({ charts }: { charts: DashboardData['charts'] })
         <h2 className="mb-4 font-semibold">Animal Status</h2>
         <div className="h-56 w-full min-w-0 sm:h-64">
           {charts.status.length === 0 ? (
-            <p className="text-sm text-muted-fg">No goats yet.</p>
+            <p className="text-sm text-muted-fg">No animal yet.</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

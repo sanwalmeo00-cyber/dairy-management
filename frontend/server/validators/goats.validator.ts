@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ANIMAL_TYPES } from '@/lib/animalType';
 import { GOAT_STATUSES } from '@/lib/goatStatus';
 import { MONEY_ACCOUNTS } from '@/lib/moneyAccount';
 
@@ -7,6 +8,7 @@ export const goatIdParamSchema = z.object({
 });
 
 const goatGender = z.enum(['Male', 'Female']);
+const animalType = z.enum(ANIMAL_TYPES);
 /** Includes legacy Active for older records / clients. */
 const goatStatus = z.enum([...GOAT_STATUSES, 'Active']);
 const healthStatus = z.enum(['Healthy', 'Sick', 'Under Treatment', 'Recovering']);
@@ -22,6 +24,7 @@ const dateString = z
 export const createGoatSchema = z.object({
   tagNumber: z.string().min(1).max(64),
   name: z.string().max(100).optional(),
+  animalType: animalType.default('Goat'),
   breed: z.string().min(1).max(100),
   gender: goatGender,
   dateOfBirth: dateString,
